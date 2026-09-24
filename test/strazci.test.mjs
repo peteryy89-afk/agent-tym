@@ -1,0 +1,146 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { posud as posudPrikaz } from '../.claude/hooks/strazce-prikazu.mjs';
+import { posud as posudZapis } from '../.claude/hooks/strazce-zapisu.mjs';
+
+const ZELENA_CI = [{ nazev: 'testy', vysledek: 'SUCCESS' }, { nazev: 'gitleaks', vysledek: 'SUCCESS' }];
+const pr = (stitky = [], kontroly = ZELENA_CI) => () => ({ stitky, kontroly });
+const rozhodnuti = (prikaz, zjistiPR = pr()) => posudPrikaz(prikaz, zjistiPR)?.rozhodnuti ?? 'povoleno';
+
+test('force push a --no-verify jsou zakázané', () => {
+  for (const p of ['git push --force', 'git push -f origin ukol/1-x', 'git push origin +ukol/1-x',
+    'git push --force-with-lease', 'git commit -m x --no-verify', 'git push -uf origin x']) {
+    assert.equal(rozhodnuti(p), 'deny', p);
+  }
+});
+
+test('push do main je zakázaný, push větve povolený', () => {
+  assert.equal(rozhodnuti('git push origin main'), 'deny');
+  assert.equal(rozhodnuti('git push -u origin ukol/3-main-fix'), 'povoleno');
+  assert.equal(rozhodnuti('git push -u origin ukol/12-sync'), 'povoleno');
+});
+
+test('gh příkazy na klíče, gisty a nastavení repozitáře jsou zakázané', () => {
+  for (const p of ['gh secret set X', 'gh gist create a.txt', 'gh repo edit --visibility public', 'gh repo delete x', 'gh auth token']) {
+    assert.equal(rozhodnuti(p), 'deny', p);
+  }
+  assert.equal(rozhodnuti('gh issue list --label stav:revize'), 'povoleno');
+  assert.equal(rozhodnuti('gh pr diff 5'), 'povoleno');
+});
+
+test('.env je zakázaný, podobné názvy ne', () => {
+  assert.equal(rozhodnuti('cat .env'), 'deny');
+  assert.equal(rozhodnuti('type config/.env.local'), 'deny');
+  assert.equal(rozhodnuti('node -e "console.log(process.env.HOME)"'), 'povoleno');
+  assert.equal(rozhodnuti('cat .envrc'), 'povoleno');
+});
+
+test('sloučení větší akce bez schválení je zakázané', () => {
+  assert.equal(rozhodnuti('gh pr merge 7 --squash', pr(['vetsi-akce'])), 'deny');
+  assert.equal(rozhodnuti('gh pr merge 7 --squash', pr(['vetsi-akce', 'schvaleno-vlastnikem'])), 'povoleno');
+  assert.equal(rozhodnuti('gh pr merge 7 --squash'), 'povoleno');
+  assert.equal(rozhodnuti('gh pr merge --squash'), 'deny');
+  assert.equal(rozhodnuti('gh pr merge 7', () => null), 'ask');
+});
+
+test('sloučení jde jen se zelenou CI (náhrada ochrany větve)', () => {
+  assert.equal(rozhodnuti('gh pr merge 7 --squash', pr([], [{ nazev: 'testy', vysledek: 'FAILURE' }])), 'deny');
+  assert.equal(rozhodnuti('gh pr merge 7 --squash', pr([], [{ nazev: 'testy', vysledek: 'SUCCESS' }, { nazev: 'gitleaks', vysledek: '' }])), 'deny');
+  assert.equal(rozhodnuti('gh pr merge 7 --squash', pr([], [])), 'deny');
+  assert.equal(rozhodnuti('gh pr merge 7 --squash', pr([], [{ nazev: 'testy', vysledek: 'SUCCESS' }, { nazev: 'volitelna', vysledek: 'SKIPPED' }])), 'povoleno');
+  const duvod = posudPrikaz('gh pr merge 7', pr([], [{ nazev: 'testy', vysledek: 'FAILURE' }])).duvod;
+  assert.match(duvod, /testy=FAILURE/);
+});
+
+test('nové závislosti a zápis přes gh api vyžadují vlastníka', () => {
+  assert.equal(rozhodnuti('npm install left-pad'), 'ask');
+  assert.equal(rozhodnuti('pip install requests'), 'ask');
+  assert.equal(rozhodnuti('gh api -X DELETE repos/a/b'), 'ask');
+  assert.equal(rozhodnuti('npm install'), 'povoleno');
+  assert.equal(rozhodnuti('gh api repos/a/b/pulls'), 'povoleno');
+});
+
+const projekt = 'C:\\Users\\Uzivatel\\Dokumenty\\Můj projekt\\agent-tym';
+const zapis = (cesta) => posudZapis(cesta, projekt)?.rozhodnuti ?? 'povoleno';
+
+test('zápis tajných klíčů je zakázaný', () => {
+  for (const c of ['.env', 'config\\.env.production', 'klic.pem', 'certs/server.key', 'C:\\Users\\Uzivatel\\.ssh\\id_ed25519']) {
+    assert.equal(zapis(`${projekt}\\${c}`), 'deny', c);
+  }
+});
+
+test('chráněné soubory vyžadují vlastníka, ostatní ne', () => {
+  for (const c of ['PROCES.md', 'CLAUDE.md', '.claude\\settings.json', '.claude\\agents\\vyvojar.md', '.github\\workflows\\ci.yml']) {
+    assert.equal(zapis(`${projekt}\\${c}`), 'ask', c);
+  }
+  for (const c of ['README.md', 'skripty\\sync.mjs', 'docs\\PROCES.md']) {
+    assert.equal(zapis(`${projekt}\\${c}`), 'povoleno', c);
+  }
+  assert.equal(zapis(undefined), 'povoleno');
+});
+
+test('strážce zápisu funguje i s cestami z Linuxu a s různou velikostí písmen ve Windows', () => {
+  const linux = '/home/runner/work/agent-tym/agent-tym';
+  assert.equal(posudZapis(`${linux}/PROCES.md`, linux)?.rozhodnuti, 'ask');
+  assert.equal(posudZapis(`${linux}/.github/workflows/ci.yml`, linux)?.rozhodnuti, 'ask');
+  assert.equal(posudZapis(`${linux}/src/app.js`, linux), null);
+  assert.equal(posudZapis('/jinde/PROCES.md', linux), null);
+  assert.equal(posudZapis(`${linux}/.env`, linux)?.rozhodnuti, 'deny');
+  assert.equal(posudZapis('c:/users/uzivatel/projekt/CLAUDE.md', String.raw`C:\Users\Uzivatel\projekt\ `.trim())?.rozhodnuti, 'ask');
+  assert.equal(posudZapis('.claude/settings.json', linux)?.rozhodnuti, 'ask');
+  assert.equal(posudZapis(String.raw`C:\Users\Uzivatel\projekt-jiny\PROCES.md`, String.raw`C:\Users\Uzivatel\projekt`), null);
+});
+
+test('obcházení kontroly sloučení z bezpečnostní revize PR #2 je zablokované', () => {
+  const zelenySchvaleny = pr(['vetsi-akce', 'schvaleno-vlastnikem']);
+  const podlePR = (c) => (c === '1' ? zelenySchvaleny() : { stitky: ['vetsi-akce'], kontroly: [{ nazev: 'testy', vysledek: 'FAILURE' }] });
+  // nález 2: více sloučení v jednom příkazu
+  assert.equal(rozhodnuti('gh pr merge 1 --squash && gh pr merge 7 --squash', podlePR), 'deny');
+  assert.equal(rozhodnuti('gh pr merge 1; gh pr merge 7', podlePR), 'deny');
+  // nález 3: gh api a GraphQL
+  assert.equal(rozhodnuti('gh api --method=PUT repos/a/b/pulls/7/merge'), 'deny');
+  assert.equal(rozhodnuti('gh api -X PUT repos/a/b/pulls/7/merge'), 'deny');
+  assert.equal(rozhodnuti('gh api graphql -f query="mutation { mergePullRequest(input:{}) { clientMutationId } }"'), 'deny');
+  assert.equal(rozhodnuti('gh api graphql -f query="mutation { addStar(input:{}) { clientMutationId } }"'), 'ask');
+  assert.equal(rozhodnuti('gh api --method=DELETE repos/a/b/x'), 'ask');
+  // nález 4: štítek schválení si agent nepřidá sám
+  assert.equal(rozhodnuti('gh pr edit 7 --add-label schvaleno-vlastnikem'), 'ask');
+  assert.equal(rozhodnuti('gh issue edit 7 --add-label "schvaleno-vlastnikem"'), 'ask');
+  // nález 5: push do main přes refspec
+  assert.equal(rozhodnuti('git push origin HEAD:main'), 'deny');
+  assert.equal(rozhodnuti('git push origin ukol/1-x:refs/heads/main'), 'deny');
+  // nález 6: zápis do chráněných souborů přes Bash
+  assert.equal(rozhodnuti("sed -i 's/a/b/' .claude/hooks/strazce-prikazu.mjs"), 'ask');
+  assert.equal(rozhodnuti('echo x > PROCES.md'), 'ask');
+  assert.equal(rozhodnuti('cp jiny.json .claude/settings.json'), 'ask');
+  assert.equal(rozhodnuti("sed -n '1,5p' PROCES.md"), 'povoleno');
+  assert.equal(rozhodnuti('cat CLAUDE.md'), 'povoleno');
+  assert.equal(rozhodnuti('npm test 2>&1 | tail -5'), 'povoleno');
+  // nález 9: jiný repozitář, --admin, --auto, varianty zápisu
+  assert.equal(rozhodnuti('gh pr merge 1 -R jiny/repo --squash', podlePR), 'deny');
+  assert.equal(rozhodnuti('gh pr merge 1 --admin', podlePR), 'deny');
+  assert.equal(rozhodnuti('gh pr merge 1 --auto', podlePR), 'deny');
+  assert.equal(rozhodnuti('gh pr "merge" 7', podlePR), 'deny');
+  assert.equal(rozhodnuti('gh.exe pr merge 7', podlePR), 'deny');
+  assert.equal(rozhodnuti('gh pr merge --squash 7', podlePR), 'deny');
+  // běžné sloučení zeleného schváleného PR projde
+  assert.equal(rozhodnuti('gh pr merge 1 --squash --delete-branch', podlePR), 'povoleno');
+});
+
+test('2. kolo revize PR #2: push bez větve, --all a rozhraní /merges', () => {
+  // nález A
+  assert.equal(rozhodnuti('git switch main && git merge ukol/7 && git push'), 'deny');
+  assert.equal(rozhodnuti("git push origin 'main'"), 'deny');
+  assert.equal(rozhodnuti('git push --all origin'), 'deny');
+  assert.equal(rozhodnuti('git push --mirror'), 'deny');
+  assert.equal(rozhodnuti('git push -u origin HEAD'), 'deny');
+  assert.equal(rozhodnuti('git push origin'), 'deny');
+  assert.equal(rozhodnuti('git push -u origin ukol/7-oprava'), 'povoleno');
+  assert.equal(rozhodnuti('git push origin platforma/2-x:platforma/2-x'), 'povoleno');
+  // nález B
+  assert.equal(rozhodnuti('gh api repos/o/r/merges -f base=main -f head=ukol/7'), 'deny');
+  assert.equal(rozhodnuti('gh api graphql -F query=@dotaz.graphql'), 'ask');
+  assert.equal(rozhodnuti('gh api repos/o/r/issues -f title=x'), 'ask');
+  assert.equal(rozhodnuti('gh api -X GET search/issues -f q=repo:o/r'), 'povoleno');
+  assert.equal(rozhodnuti('gh api repos/o/r/pulls/2/comments'), 'povoleno');
+});
