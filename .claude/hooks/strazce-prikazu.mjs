@@ -4,7 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const CHRANENE_CESTY = String.raw`(PROCES\.md|CLAUDE\.md|\.gitleaks\.toml|\.claude[\\/]|\.github[\\/])`;
+const CHRANENE_CESTY = String.raw`(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude[\\/]|\.github[\\/])`;
 
 const ZAKAZANE = [
   [/\bgit\b[^|;&]*\bpush\b[^|;&]*(\s--force\b|\s--force-with-lease\b|\s-[a-zA-Z]*f\b|\s\+\S+)/, 'Force push je zakázaný.'],
@@ -68,7 +68,15 @@ function posudPush(prikaz) {
   return null;
 }
 
-export function posud(prikaz, zjistiPR = infoPR) {
+// Noční směna (NOCNI-SMENA.md): bez vlastníka se nic neslučuje ani nezveřejňuje
+// a místo dotazu se rovnou zamítá, protože není koho se zeptat.
+const ZAKAZANE_V_NOCI = [
+  [/\bgh(\.exe)?\s+pr\s+["']?merge\b/i,'V noční směně se PR nikdy neslučují. Nech PR na vlastníkovi.'],
+  [/\bgh\s+(release|workflow\s+run|repo\s+create)\b/,'V noční směně se nic nevydává ani nespouští.'],
+  [/\b(npm|pnpm|yarn)\s+publish\b/,'V noční směně se nic nezveřejňuje.'],
+];
+
+function posudDen(prikaz, zjistiPR) {
   for (const [vzor, duvod] of ZAKAZANE) if (vzor.test(prikaz)) return { rozhodnuti: 'deny', duvod };
   const push = posudPush(prikaz);
   if (push) return push;
@@ -76,6 +84,15 @@ export function posud(prikaz, zjistiPR = infoPR) {
   if (merge) return merge;
   for (const [vzor, duvod] of DOTAZ) if (vzor.test(prikaz)) return { rozhodnuti: 'ask', duvod };
   return null;
+}
+
+export function posud(prikaz, zjistiPR = infoPR, prostredi = process.env) {
+  if (prostredi.NOCNI_SMENA !== '1') return posudDen(prikaz, zjistiPR);
+  for (const [vzor, duvod] of ZAKAZANE_V_NOCI) if (vzor.test(prikaz)) return { rozhodnuti: 'deny', duvod };
+  const vysledek = posudDen(prikaz, zjistiPR);
+  if (vysledek?.rozhodnuti === 'ask')
+    return { rozhodnuti: 'deny', duvod: `${vysledek.duvod} V noční směně není koho se zeptat: dej úkolu štítek pro-vlastnika a pokračuj dalším.` };
+  return vysledek;
 }
 
 function infoPR(cislo) {

@@ -13,12 +13,14 @@ function issues(stitek) {
 }
 
 const SEKCE = [
+  ['ranni-zprava', 'Ranní zpráva noční směny'],
   ['pro-vlastnika', 'Otázky pro vlastníka'],
   ['stav:ceka-na-vlastnika', 'Čeká na schválení vlastníkem'],
   ['blokovano', 'Blokováno'],
   ['stav:revize', 'V revizi'],
   ['stav:rozpracovano', 'Rozpracováno'],
   ['stav:pripraveno', 'Připraveno'],
+  ['noc:ano', 'Ve frontě na noční směnu'],
 ];
 
 const radky = [];

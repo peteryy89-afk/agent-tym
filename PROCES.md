@@ -77,7 +77,7 @@ stav:napad → stav:pripraveno → stav:rozpracovano → stav:revize → (stav:c
 
 ## 6. Chráněné soubory
 
-`PROCES.md`, `CLAUDE.md`, `.claude/**`, `.github/**`, `.gitleaks.toml`. Změnu dělá tým Platforma a je to vždy větší akce. Hook se při zápisu zeptá vlastníka.
+`PROCES.md`, `CLAUDE.md`, `NOCNI-SMENA.md`, `.claude/**`, `.github/**`, `.gitleaks.toml`. Změnu dělá tým Platforma a je to vždy větší akce. Hook se při zápisu zeptá vlastníka.
 
 **Sloučení jen se zelenou CI:** Hlavní pojistka je **ochrana větve `main` na GitHubu**: sloučení jen přes PR, povinná zelená CI, zákaz force push. U soukromého repozitáře vyžaduje tarif GitHub Pro. Druhá vrstva je `strazce-prikazu`, který odmítne `gh pr merge`, pokud PR nemá všechny kontroly CI zelené. Hook hledá text v příkazu, takže jde obejít. Obcházení je porušení procesu. Štítek `schvaleno-vlastnikem` smí přidat jen vlastník: hook se u něj vždy zeptá a vlastníkovo potvrzení je samo o sobě schválení.
 
@@ -119,3 +119,11 @@ stav:napad → stav:pripraveno → stav:rozpracovano → stav:revize → (stav:c
 8. **Opravné kolo:** oprav nálezy ve stejné větvi, pushni výslovně `git push origin <větev>` (hook odmítne push bez větve) a do PR připiš, co a jak jsi opravil. Po 2 neúspěšných kolech se zastav a vysvětli proč.
 
 **Nikdy:** `git push --force`, `--no-verify`, slučování PR, úprava kritérií přijetí, `.env*`, skutečná data zákazníků. Chráněné soubory (sekce 6) a nové závislosti jen tehdy, když to issue výslovně povoluje a má štítek `vetsi-akce`.
+
+## 11. Noční směna
+
+Práce bez vlastníka (rutina Claude Code v cloudu) se řídí `NOCNI-SMENA.md`. Stručně:
+- bere jen úkoly se štítky `noc:ano` a `stav:pripraveno`, bez `vetsi-akce`, nejvýše 3 za noc,
+- větve `claude/ukol-<číslo>-<popis>`,
+- **nikdy neslučuje**: při `NOCNI_SMENA=1` hook `gh pr merge` vždy odmítne a místo dotazu zamítá,
+- ráno nechá issue „Ranní zpráva“ se štítky `ranni-zprava` a `pro-vlastnika`.

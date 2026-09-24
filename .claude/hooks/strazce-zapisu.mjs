@@ -3,7 +3,7 @@
 import { pathToFileURL } from 'node:url';
 
 const TAJNE = /(^|\/)(\.env(\.[\w.-]+)?|[^/]+\.(pem|key|p12|pfx)|id_(rsa|ed25519)[^/]*)$/i;
-const CHRANENE = /^(PROCES\.md|CLAUDE\.md|\.gitleaks\.toml|\.claude\/.*|\.github\/.*)$/;
+const CHRANENE = /^(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude\/.*|\.github\/.*)$/;
 
 // Cesty z Windows i POSIX na jednotný tvar, aby hook fungoval lokálně i v cloudu.
 const sjednot = (p) => p.replaceAll('\\', '/').replace(/\/+$/, '');
@@ -17,7 +17,14 @@ export function relativniCesta(souborovaCesta, projekt) {
   return c.startsWith(`${k}/`) ? cesta.slice(koren.length + 1) : null;
 }
 
-export function posud(souborovaCesta, projekt) {
+export function posud(souborovaCesta, projekt, prostredi = process.env) {
+  const vysledek = posudDen(souborovaCesta, projekt);
+  if (prostredi.NOCNI_SMENA === '1' && vysledek?.rozhodnuti === 'ask')
+    return { rozhodnuti: 'deny', duvod: `${vysledek.duvod} V noční směně se chráněné soubory nemění.` };
+  return vysledek;
+}
+
+function posudDen(souborovaCesta, projekt) {
   if (!souborovaCesta) return null;
   const cesta = sjednot(souborovaCesta);
   if (TAJNE.test(cesta)) return { rozhodnuti: 'deny', duvod: 'Soubory s tajnými klíči agenti nezapisují (PROCES.md, sekce 8).' };

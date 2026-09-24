@@ -7,6 +7,7 @@ Znovupoužitelný vývojový tým AI agentů pro Claude Code. Úkol vezme, rozpl
 |---|---|
 | `PROCES.md` | závazný proces: role, dráhy, štítky, definice „hotovo“, větší akce, pravidla proti halucinaci |
 | `CLAUDE.md` | instrukce pro manažera (hlavní session) |
+| `NOCNI-SMENA.md` | postup pro práci přes noc bez vlastníka (rutina Claude Code v cloudu) |
 | `.claude/agents/` | 9 týmů = 9 vedoucích (`*-vedouci`) a 27 členů, přehled v `PROCES.md`, sekce 1 |
 | `.claude/settings.json` | pravidla oprávnění a hooky |
 | `.claude/hooks/` | `strazce-prikazu` (nebezpečné příkazy), `strazce-zapisu` (tajné klíče a chráněné soubory), `prehled` (stav týmu na začátku session) |

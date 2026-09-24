@@ -144,3 +144,31 @@ test('2. kolo revize PR #2: push bez větve, --all a rozhraní /merges', () => {
   assert.equal(rozhodnuti('gh api -X GET search/issues -f q=repo:o/r'), 'povoleno');
   assert.equal(rozhodnuti('gh api repos/o/r/pulls/2/comments'), 'povoleno');
 });
+
+test('noční směna: nic se neslučuje, nezveřejňuje a místo dotazu se zamítá', () => {
+  const noc = { NOCNI_SMENA: '1' };
+  const vNoci = (prikaz, zjistiPR = pr()) => posudPrikaz(prikaz, zjistiPR, noc)?.rozhodnuti ?? 'povoleno';
+  assert.equal(vNoci('gh pr merge 1 --squash', pr(['schvaleno-vlastnikem'])), 'deny');
+  assert.equal(vNoci('GH pr merge 1'), 'deny');
+  assert.equal(vNoci('gh release create v1'), 'deny');
+  assert.equal(vNoci('gh workflow run ci.yml'), 'deny');
+  assert.equal(vNoci('npm publish'), 'deny');
+  assert.equal(vNoci('npm install left-pad'), 'deny');
+  assert.equal(vNoci('gh pr edit 3 --add-label schvaleno-vlastnikem'), 'deny');
+  assert.match(posudPrikaz('npm install x', pr(), noc).duvod, /pro-vlastnika/);
+  assert.equal(vNoci('git push -u origin claude/ukol-4-sync'), 'povoleno');
+  assert.equal(vNoci('gh pr create --title x --body y'), 'povoleno');
+  assert.equal(vNoci('gh issue list --label noc:ano'), 'povoleno');
+  // přes den se nic nemění
+  assert.equal(posudPrikaz('gh pr merge 1', pr(), {})?.rozhodnuti ?? 'povoleno', 'povoleno');
+  assert.equal(posudPrikaz('npm install x', pr(), {})?.rozhodnuti, 'ask');
+});
+
+test('noční směna: chráněné soubory se zamítají, NOCNI-SMENA.md je chráněný', () => {
+  const koren = '/home/user/agent-tym';
+  assert.equal(posudZapis(`${koren}/NOCNI-SMENA.md`, koren, {})?.rozhodnuti, 'ask');
+  assert.equal(posudZapis(`${koren}/NOCNI-SMENA.md`, koren, { NOCNI_SMENA: '1' })?.rozhodnuti, 'deny');
+  assert.equal(posudZapis(`${koren}/.claude/settings.json`, koren, { NOCNI_SMENA: '1' })?.rozhodnuti, 'deny');
+  assert.equal(posudZapis(`${koren}/skripty/sync.mjs`, koren, { NOCNI_SMENA: '1' }), null);
+  assert.equal(posudPrikaz('echo x > NOCNI-SMENA.md', pr(), {})?.rozhodnuti, 'ask');
+});
