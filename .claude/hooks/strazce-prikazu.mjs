@@ -98,20 +98,37 @@ function posudStitky(prikaz) {
   return null;
 }
 
-// Komentáře může psát kdokoli, v noci je proto čti jen s filtrem na vlastníka.
-const FILTR_AUTORA = /select\(\s*\.(author|user)\.login\s*==/;
+// Komentáře může psát kdokoli, v noci je proto čti jen s filtrem na vlastníka repozitáře.
+// Login musí být v příkazu napsaný doslova, proměnnou z příkazu hook ověřit nemůže.
+const FILTR_AUTORA = /select\(\s*\.(?:author|user)\.login\s*==\s*"([\w-]+)"\s*\)/g;
 const CTENI_KOMENTARU = [
   /\bgh\s+(issue|pr)\s+view\b[^|;&\n]*\s(-c|--comments)\b/,
-  /\bgh\s+(issue|pr)\s+view\b[^|;&\n]*--json[\s=]+\S*\b(comments|reviews)\b/,
-  /\bgh\s+api\b[^|;&\n]*\/(comments|reviews)\b/,
+  /\bgh\s+(issue|pr)\s+view\b[^|;&\n]*--json[\s=]+\S*\b(comments|reviews|latestReviews)\b/,
+  /\bgh\s+api\b[^|;&\n]*\/(comments|reviews|timeline|events)\b/,
 ];
 
-function posudKomentare(prikaz) {
-  if (FILTR_AUTORA.test(prikaz) || !CTENI_KOMENTARU.some((vzor) => vzor.test(prikaz))) return null;
+function posudKomentare(prikaz, zjistiVlastnika) {
+  if (!CTENI_KOMENTARU.some((vzor) => vzor.test(prikaz))) return null;
+  const loginy = [...prikaz.matchAll(FILTR_AUTORA)].map((m) => m[1]);
+  if (loginy.length) {
+    const vlastnik = zjistiVlastnika();
+    if (vlastnik && loginy.every((l) => l.toLowerCase() === vlastnik.toLowerCase())) return null;
+  }
   return {
     rozhodnuti: 'deny',
-    duvod: 'V noční směně čti komentáře jen od vlastníka, například: gh issue view <č> --json comments --jq \'.comments[] | select(.author.login == "<vlastník>") | .body\'',
+    duvod: 'V noční směně čti komentáře jen od vlastníka repozitáře, login napiš doslova: gh issue view <č> --json comments --jq \'.comments[] | select(.author.login == "<login vlastníka>") | .body\'',
   };
+}
+
+// Noční práce patří jen do větví claude/, aby ji vlastník ráno poznal a nic jiného nepřepsala.
+function posudPushVNoci(prikaz) {
+  for (const [, zbytek] of prikaz.matchAll(/\bgit\s+push\b([^|;&\n]*)/g)) {
+    const [, ...refspecy] = zbytek.replace(/["']/g, '').trim().split(/\s+/).filter((a) => a && !a.startsWith('-'));
+    const cile = refspecy.map((r) => r.split(':').pop().replace(/^refs\/heads\//, ''));
+    if (cile.some((c) => !c.startsWith('claude/')))
+      return { rozhodnuti: 'deny', duvod: 'V noční směně se pushuje jen do větví claude/ukol-<číslo>-<popis>.' };
+  }
+  return null;
 }
 
 function posudDen(prikaz, zjistiPR) {
@@ -124,15 +141,24 @@ function posudDen(prikaz, zjistiPR) {
   return null;
 }
 
-export function posud(prikaz, zjistiPR = infoPR, prostredi = process.env) {
+export function posud(prikaz, zjistiPR = infoPR, prostredi = process.env, zjistiVlastnika = vlastnikRepozitare) {
   if (!jeNoc(prostredi)) return posudDen(prikaz, zjistiPR);
   for (const [vzor, duvod] of ZAKAZANE_V_NOCI) if (vzor.test(prikaz)) return { rozhodnuti: 'deny', duvod };
-  const noc = posudStitky(prikaz) ?? posudKomentare(prikaz);
-  if (noc) return noc;
   const vysledek = posudDen(prikaz, zjistiPR);
+  if (vysledek?.rozhodnuti === 'deny') return vysledek;
+  const noc = posudStitky(prikaz) ?? posudPushVNoci(prikaz) ?? posudKomentare(prikaz, zjistiVlastnika);
+  if (noc) return noc;
   if (vysledek?.rozhodnuti === 'ask')
     return { rozhodnuti: 'deny', duvod: `${vysledek.duvod} V noční směně není koho se zeptat: dej úkolu štítek pro-vlastnika a pokračuj dalším.` };
   return vysledek;
+}
+
+function vlastnikRepozitare() {
+  try {
+    return execFileSync('gh', ['repo', 'view', '--json', 'owner', '--jq', '.owner.login'], { encoding: 'utf8', timeout: 20000 }).trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 function infoPR(cislo) {
@@ -161,10 +187,13 @@ async function main() {
   if (vysledek) vystup(vysledek);
 }
 
+// Když hook spadne, Claude Code akci pustí. Proto se při chybě rozhoduje výslovně.
+
 function vystup({ rozhodnuti, duvod }) {
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: rozhodnuti, permissionDecisionReason: duvod },
   }));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  main().catch(() => vystup({ rozhodnuti: jeNoc() ? 'deny' : 'ask', duvod: 'Strážce příkazů selhal. Příkaz nešlo ověřit.' }));

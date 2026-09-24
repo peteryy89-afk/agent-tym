@@ -205,7 +205,7 @@ test('noční směna: štítky jen stavové, frontu si agent sám nerozšíří'
 });
 
 test('noční směna: komentáře jen s filtrem na vlastníka', () => {
-  const vNoci = (prikaz) => posudPrikaz(prikaz, pr(), {})?.rozhodnuti ?? 'povoleno';
+  const vNoci = (prikaz) => posudPrikaz(prikaz, pr(), {}, () => 'vlastnik')?.rozhodnuti ?? 'povoleno';
   for (const p of ['gh issue view 4 --comments', 'gh pr view 6 -c', 'gh pr view 6 --json comments,reviews',
     'gh api repos/o/r/issues/4/comments', 'gh api repos/o/r/pulls/6/reviews']) {
     assert.equal(vNoci(p), 'deny', p);
@@ -227,4 +227,28 @@ test('strážce noci: konektory, model a počet podagentů', () => {
   assert.equal(posudNoc('Agent', { model: 'sonnet' }, {}, () => Infinity)?.rozhodnuti, 'deny');
   assert.equal(posudNoc('Agent', {}, DEN), null);
   assert.equal(posudNoc('Read', {}, {}), null);
+});
+
+test('2. kolo revize PR #5: push jen do claude/, fork, filtr na skutečného vlastníka', () => {
+  const vNoci = (prikaz, vlastnik = () => 'vlastnik') => posudPrikaz(prikaz, pr(), {}, vlastnik)?.rozhodnuti ?? 'povoleno';
+  // nález 2: push mimo claude/
+  assert.equal(vNoci('git push -u origin platforma/2-x'), 'deny');
+  assert.equal(vNoci('git push origin claude/ukol-4-x:ukol/4-x'), 'deny');
+  assert.equal(vNoci('git push -u origin claude/ukol-4-sync'), 'povoleno');
+  assert.equal(vNoci('git push origin claude/ukol-4-sync:refs/heads/claude/ukol-4-sync'), 'povoleno');
+  assert.equal(vNoci('git push origin main'), 'deny');
+  // nález 1: kontrolní příkaz ze začátku směny hook zamítne
+  assert.match(posudPrikaz('gh issue edit 0 --add-label noc:ano', pr(), {}).duvod, /V noční směně nesmíš přidat štítek/);
+  // nález 4: fork dědí model hlavní session
+  assert.equal(posudNoc('Agent', { subagent_type: 'fork', model: 'sonnet' }, {})?.rozhodnuti, 'deny');
+  // nález 5: login musí být vlastník, timeline je taky čtení komentářů
+  const cizi = 'gh issue view 4 --json comments --jq \'.comments[] | select(.author.login == "utocnik") | .body\'';
+  assert.equal(vNoci(cizi), 'deny');
+  assert.equal(vNoci(cizi.replace('utocnik', 'Vlastnik')), 'povoleno');
+  assert.equal(vNoci(cizi.replace('utocnik', 'vlastnik'), () => null), 'deny');
+  assert.equal(vNoci('gh issue view 4 --json comments --jq \'.comments[] | select(.author.login == "$VLASTNIK")\''), 'deny');
+  assert.equal(vNoci('gh api repos/o/r/issues/4/timeline'), 'deny');
+  assert.equal(vNoci('gh api repos/o/r/issues/4/timeline --jq \'.[] | select(.user.login == "vlastnik")\''), 'povoleno');
+  // přes den se push do jiných větví nehlídá
+  assert.equal(rozhodnuti('git push -u origin platforma/2-x'), 'povoleno');
 });

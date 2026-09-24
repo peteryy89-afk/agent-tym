@@ -18,6 +18,8 @@ export function posud(nastroj, vstup = {}, prostredi = process.env, zapocitej = 
       ? { rozhodnuti: 'deny', duvod: 'V noční směně se konektory nepoužívají (NOCNI-SMENA.md, sekce 4).' }
       : { rozhodnuti: 'ask', duvod: 'Konektor jde mimo pojistky týmu. Potvrď, jen pokud ho opravdu chceš použít.' };
   if (!noc || !/^(Agent|Task)$/.test(nastroj)) return null;
+  if (vstup.subagent_type === 'fork')
+    return { rozhodnuti: 'deny', duvod: 'V noční směně se nepoužívá fork (dědí model hlavní session). Spusť pojmenovaného agenta s model: "sonnet".' };
   if (!LEVNE_MODELY.has(vstup.model))
     return { rozhodnuti: 'deny', duvod: 'V noční směně spouštěj podagenty s model: "sonnet" (šetří limit předplatného).' };
   if (zapocitej() > MAX_PODAGENTU)
@@ -51,6 +53,7 @@ async function main() {
     const data = JSON.parse(vstup);
     vysledek = posud(data.tool_name ?? '', data.tool_input ?? {}, process.env, pocitadlo(data.session_id ?? 'bez-session'));
   } catch {
+    // neplatný vstup i pád hooku: Claude Code by akci pustil, proto rozhodujeme výslovně
     vysledek = { rozhodnuti: jeNoc() ? 'deny' : 'ask', duvod: 'Strážce noci nedostal platný vstup. Akci nešlo ověřit.' };
   }
   if (!vysledek) return;

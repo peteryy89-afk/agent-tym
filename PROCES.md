@@ -83,7 +83,7 @@ stav:napad → stav:pripraveno → stav:rozpracovano → stav:revize → (stav:c
 
 **Denní a noční režim:** hooky jsou ve výchozím stavu v nočním režimu (sekce 11). Denní režim s dotazy na vlastníka zapíná jen `AGENT_TYM_DEN=1` v lokálním `.claude/settings.local.json`, který se necommituje. Na začátku session vypíše `prehled` řádek `REŽIM: den` nebo `REŽIM: noc`.
 
-**Kontrola chráněných souborů na GitHubu:** workflow `chranene-soubory` běží z `main` (`pull_request_target`), takže ho PR nemůže změnit. Selže, když PR mění chráněný soubor a nemá štítek `schvaleno-vlastnikem`.
+**Kontrola chráněných souborů na GitHubu:** workflow `chranene-soubory` běží z `main` (`pull_request_target`), takže ho PR nemůže změnit. Selže, když PR mění chráněný soubor a nemá štítek `schvaleno-vlastnikem`. Nový commit po schválení štítek odebere, vlastník ho po kontrole přidá znovu.
 
 ## 7. Pravidla proti halucinaci
 

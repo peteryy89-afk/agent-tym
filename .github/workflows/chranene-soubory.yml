@@ -1,4 +1,5 @@
 # Selže, když PR mění chráněný soubor (PROCES.md, sekce 6) bez štítku schvaleno-vlastnikem.
+# Nový commit schválení ruší: štítek odebere a vlastník ho po kontrole přidá znovu.
 # Běží z main (pull_request_target), takže ho PR nemůže změnit ani obejít úpravou ci.yml.
 # Nikdy nečte ani nespouští kód z PR: seznam souborů bere jen z API GitHubu.
 name: Chráněné soubory
@@ -10,7 +11,8 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
+  issues: write
 jobs:
   chranene-soubory:
     runs-on: ubuntu-latest
@@ -22,9 +24,21 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           SCHVALENO: ${{ contains(github.event.pull_request.labels.*.name, 'schvaleno-vlastnikem') }}
+          AKCE: ${{ github.event.action }}
+          POCET: ${{ github.event.pull_request.changed_files }}
         run: |
+          if [ "$AKCE" = "synchronize" ] && [ "$SCHVALENO" = "true" ]; then
+            gh api -X DELETE "repos/$REPO/issues/$PR/labels/schvaleno-vlastnikem" > /dev/null
+            SCHVALENO=false
+            echo "Nový commit po schválení: štítek schvaleno-vlastnikem odebrán."
+          fi
+          soubory=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename')
+          if [ "$(printf '%s\n' "$soubory" | grep -c .)" -lt "$POCET" ]; then
+            echo "::error::GitHub nevrátil všechny změněné soubory ($POCET). Takový PR schvaluje vlastník."
+            [ "$SCHVALENO" = "true" ] && exit 0 || exit 1
+          fi
           zmenene=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)')
-          chranene=$(printf '%s\n' "$zmenene" | grep -E '^(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude/|\.github/)' || true)
+          chranene=$(printf '%s\n' "$zmenene" | grep -iE '^(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude/|\.github/)' || true)
           if [ -z "$chranene" ]; then
             echo "PR nemění chráněné soubory."
             exit 0

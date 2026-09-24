@@ -57,4 +57,12 @@ async function main() {
   }));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+// Když hook spadne, Claude Code akci pustí. Proto se při chybě rozhoduje výslovně.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  main().catch(() => process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: jeNoc() ? 'deny' : 'ask',
+      permissionDecisionReason: 'Strážce zápisu selhal. Zápis nešlo ověřit.',
+    },
+  })));
