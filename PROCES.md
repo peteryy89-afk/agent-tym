@@ -81,6 +81,10 @@ stav:napad → stav:pripraveno → stav:rozpracovano → stav:revize → (stav:c
 
 **Sloučení jen se zelenou CI:** Hlavní pojistka je **ochrana větve `main` na GitHubu**: sloučení jen přes PR, povinná zelená CI, zákaz force push. U soukromého repozitáře vyžaduje tarif GitHub Pro. Druhá vrstva je `strazce-prikazu`, který odmítne `gh pr merge`, pokud PR nemá všechny kontroly CI zelené. Hook hledá text v příkazu, takže jde obejít. Obcházení je porušení procesu. Štítek `schvaleno-vlastnikem` smí přidat jen vlastník: hook se u něj vždy zeptá a vlastníkovo potvrzení je samo o sobě schválení.
 
+**Denní a noční režim:** hooky jsou ve výchozím stavu v nočním režimu (sekce 11). Denní režim s dotazy na vlastníka zapíná jen `AGENT_TYM_DEN=1` v lokálním `.claude/settings.local.json`, který se necommituje. Na začátku session vypíše `prehled` řádek `REŽIM: den` nebo `REŽIM: noc`.
+
+**Kontrola chráněných souborů na GitHubu:** workflow `chranene-soubory` běží z `main` (`pull_request_target`), takže ho PR nemůže změnit. Selže, když PR mění chráněný soubor a nemá štítek `schvaleno-vlastnikem`.
+
 ## 7. Pravidla proti halucinaci
 
 1. **Fakta se štítky:** [OVĚŘENO] se zdrojem (soubor:řádek, URL, výstup příkazu), [NEOVĚŘENO], [NÁZOR]. Čísla se nevymýšlejí.
@@ -106,7 +110,7 @@ stav:napad → stav:pripraveno → stav:rozpracovano → stav:revize → (stav:c
 ## 10. Postup programátora (frontend, backend, data-ai, devops, inženýři Platformy)
 
 1. `gh issue view <číslo>`. Přečti kritéria přijetí a sekci Mimo rozsah. Když je něco nejasné, **nezačínej** a vrať otázku vedoucímu.
-2. `git switch main && git pull`, potom `git switch -c ukol/<číslo>-<krátký-popis>` (Platforma: `platforma/<číslo>-<krátký-popis>`). Přepni štítek issue na `stav:rozpracovano`.
+2. `git switch main && git pull`, potom `git switch -c ukol/<číslo>-<krátký-popis>` (Platforma: `platforma/<číslo>-<krátký-popis>`, noční směna: `claude/ukol-<číslo>-<krátký-popis>`). Přepni štítek issue na `stav:rozpracovano`.
 3. Implementuj **jen to, co je v issue**. Žádná vylepšení navíc.
 4. Ke každé logice napiš test. Spusť testy a ulož si jejich výstup.
 5. Commituj po malých krocích. Zprávy piš česky v rozkazovacím způsobu.
@@ -123,7 +127,8 @@ stav:napad → stav:pripraveno → stav:rozpracovano → stav:revize → (stav:c
 ## 11. Noční směna
 
 Práce bez vlastníka (rutina Claude Code v cloudu) se řídí `NOCNI-SMENA.md`. Stručně:
-- bere jen úkoly se štítky `noc:ano` a `stav:pripraveno`, bez `vetsi-akce`, nejvýše 3 za noc,
-- větve `claude/ukol-<číslo>-<popis>`,
-- **nikdy neslučuje**: při `NOCNI_SMENA=1` hook `gh pr merge` vždy odmítne a místo dotazu zamítá,
+- bere jen úkoly, které **založil vlastník**, se štítky `noc:ano` a `stav:pripraveno`, bez `vetsi-akce`, nejvýše 3 za noc a jednu směnu za noc,
+- větve `claude/ukol-<číslo>-<popis>`, podagenti na modelu `sonnet`, nejvýše 20 za spuštění,
+- **nikdy neslučuje** a nepoužívá konektory. Hooky v nočním režimu zamítají všechno, na co by se přes den ptaly vlastníka,
+- noční režim je výchozí, takže platí i bez proměnné `NOCNI_SMENA` (sekce 6),
 - ráno nechá issue „Ranní zpráva“ se štítky `ranni-zprava` a `pro-vlastnika`.

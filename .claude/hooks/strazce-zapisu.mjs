@@ -1,6 +1,7 @@
 // PreToolUse hook pro Write, Edit a NotebookEdit.
 // Blokuje zápis tajných klíčů. U chráněných souborů se zeptá vlastníka (PROCES.md, sekce 6).
 import { pathToFileURL } from 'node:url';
+import { jeNoc } from './rezim.mjs';
 
 const TAJNE = /(^|\/)(\.env(\.[\w.-]+)?|[^/]+\.(pem|key|p12|pfx)|id_(rsa|ed25519)[^/]*)$/i;
 const CHRANENE = /^(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude\/.*|\.github\/.*)$/;
@@ -19,7 +20,7 @@ export function relativniCesta(souborovaCesta, projekt) {
 
 export function posud(souborovaCesta, projekt, prostredi = process.env) {
   const vysledek = posudDen(souborovaCesta, projekt);
-  if (prostredi.NOCNI_SMENA === '1' && vysledek?.rozhodnuti === 'ask')
+  if (jeNoc(prostredi) && vysledek?.rozhodnuti === 'ask')
     return { rozhodnuti: 'deny', duvod: `${vysledek.duvod} V noční směně se chráněné soubory nemění.` };
   return vysledek;
 }
@@ -37,10 +38,15 @@ function posudDen(souborovaCesta, projekt) {
 async function main() {
   let vstup = '';
   for await (const kus of process.stdin) vstup += kus;
-  const data = JSON.parse(vstup);
-  const projekt = process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd();
-  const cesta = data.tool_input?.file_path ?? data.tool_input?.notebook_path;
-  const vysledek = posud(cesta, projekt);
+  let data;
+  try {
+    data = JSON.parse(vstup);
+  } catch {
+    data = null;
+  }
+  const vysledek = data === null
+    ? { rozhodnuti: jeNoc() ? 'deny' : 'ask', duvod: 'Strážce zápisu nedostal platný vstup. Zápis nešlo ověřit.' }
+    : posud(data.tool_input?.file_path ?? data.tool_input?.notebook_path, process.env.CLAUDE_PROJECT_DIR || data.cwd || process.cwd());
   if (!vysledek) return;
   process.stdout.write(JSON.stringify({
     hookSpecificOutput: {

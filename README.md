@@ -10,8 +10,8 @@ Znovupoužitelný vývojový tým AI agentů pro Claude Code. Úkol vezme, rozpl
 | `NOCNI-SMENA.md` | postup pro práci přes noc bez vlastníka (rutina Claude Code v cloudu) |
 | `.claude/agents/` | 9 týmů = 9 vedoucích (`*-vedouci`) a 27 členů, přehled v `PROCES.md`, sekce 1 |
 | `.claude/settings.json` | pravidla oprávnění a hooky |
-| `.claude/hooks/` | `strazce-prikazu` (nebezpečné příkazy), `strazce-zapisu` (tajné klíče a chráněné soubory), `prehled` (stav týmu na začátku session) |
-| `.github/` | CI (testy a gitleaks), šablony issue a PR, Dependabot |
+| `.claude/hooks/` | `strazce-prikazu` (nebezpečné příkazy), `strazce-zapisu` (tajné klíče a chráněné soubory), `strazce-noci` (konektory a podagenti), `rezim` (den nebo noc), `prehled` (stav týmu na začátku session) |
+| `.github/` | CI (testy a gitleaks), kontrola chráněných souborů, šablony issue a PR, Dependabot |
 | `test/` | testy hooků a struktury týmů (kdo koho smí spouštět) |
 
 ## Týmy
@@ -28,9 +28,11 @@ Znovupoužitelný vývojový tým AI agentů pro Claude Code. Úkol vezme, rozpl
 | **Platforma** (infrastruktura a proces týmu) | `platforma-vedouci` | procesní inženýr, inženýr nástrojů, hodnotitel agentů |
 
 ## Jak se to používá
-1. Otevři Claude Code v kořeni repozitáře.
-2. Zadej práci manažerovi, například „Postav X“.
-3. Stav sleduj v GitHub issues podle štítků, otázky pro tebe mají štítek `pro-vlastnika`.
+1. Jednou na svém počítači vytvoř `.claude/settings.local.json` s obsahem `{"env": {"AGENT_TYM_DEN": "1"}}`. Bez něj běží hooky v přísném nočním režimu.
+2. Otevři Claude Code v kořeni repozitáře. Úvodní přehled má ukázat `REŽIM: den`.
+3. Zadej práci manažerovi, například „Postav X“.
+4. Stav sleduj v GitHub issues podle štítků, otázky pro tebe mají štítek `pro-vlastnika`.
+5. Práce přes noc: `NOCNI-SMENA.md`, sekce 6.
 
 ## Etapy
-Hotovo: jádro, 9 týmů, pojistky. Plánováno: převzetí oficiálních pluginů Anthropicu pro kontrolu kódu, přehled a board, záloha na OpenRouter, práce přes noc.
+Hotovo: jádro, 9 týmů, pojistky, noční směna. Plánováno: převzetí oficiálních pluginů Anthropicu pro kontrolu kódu, přehled a board, záloha na OpenRouter.

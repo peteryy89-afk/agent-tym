@@ -1,0 +1,39 @@
+# Selže, když PR mění chráněný soubor (PROCES.md, sekce 6) bez štítku schvaleno-vlastnikem.
+# Běží z main (pull_request_target), takže ho PR nemůže změnit ani obejít úpravou ci.yml.
+# Nikdy nečte ani nespouští kód z PR: seznam souborů bere jen z API GitHubu.
+name: Chráněné soubory
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+concurrency:
+  group: chranene-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  chranene-soubory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Kontrola změněných souborů
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SCHVALENO: ${{ contains(github.event.pull_request.labels.*.name, 'schvaleno-vlastnikem') }}
+        run: |
+          zmenene=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)')
+          chranene=$(printf '%s\n' "$zmenene" | grep -E '^(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude/|\.github/)' || true)
+          if [ -z "$chranene" ]; then
+            echo "PR nemění chráněné soubory."
+            exit 0
+          fi
+          echo "PR mění chráněné soubory:"
+          printf '%s\n' "$chranene" | sed 's/^/  /'
+          if [ "$SCHVALENO" = "true" ]; then
+            echo "Štítek schvaleno-vlastnikem je přítomen."
+            exit 0
+          fi
+          echo "::error::Změnu chráněných souborů schvaluje vlastník štítkem schvaleno-vlastnikem (PROCES.md, sekce 6)."
+          exit 1
