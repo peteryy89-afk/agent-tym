@@ -3,8 +3,9 @@
 // Hlavní pojistka je ochrana větve main na GitHubu (PROCES.md, sekce 6), tohle je druhá vrstva.
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { jeNoc } from './rezim.mjs';
 
-const CHRANENE_CESTY = String.raw`(PROCES\.md|CLAUDE\.md|\.gitleaks\.toml|\.claude[\\/]|\.github[\\/])`;
+const CHRANENE_CESTY = String.raw`(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude[\\/]|\.github[\\/])`;
 
 const ZAKAZANE = [
   [/\bgit\b[^|;&]*\bpush\b[^|;&]*(\s--force\b|\s--force-with-lease\b|\s-[a-zA-Z]*f\b|\s\+\S+)/, 'Force push je zakázaný.'],
@@ -68,7 +69,69 @@ function posudPush(prikaz) {
   return null;
 }
 
-export function posud(prikaz, zjistiPR = infoPR) {
+// Noční směna (NOCNI-SMENA.md): bez vlastníka se nic neslučuje ani nezveřejňuje
+// a místo dotazu se rovnou zamítá, protože není koho se zeptat.
+const ZAKAZANE_V_NOCI = [
+  [/\bgh(\.exe)?\s+pr\s+["']?merge\b/i, 'V noční směně se PR nikdy neslučují. Nech PR na vlastníkovi.'],
+  [/\bgh\s+(release|workflow\s+run|repo\s+create)\b/, 'V noční směně se nic nevydává ani nespouští.'],
+  [/\b(npm|pnpm|yarn)\s+publish\b/, 'V noční směně se nic nezveřejňuje.'],
+  [/\bgh\s+label\s+(?!list\b)/, 'V noční směně se štítky nevytvářejí, neupravují ani nemažou.'],
+  [/\bgh\s+issue\s+(delete|transfer|lock|unlock|pin|unpin)\b/, 'V noční směně se issues nemažou, nepřesouvají ani nezamykají.'],
+  [/\bgh\s+issue\s+edit\b[^|;&\n]*\s(-b|--body|-F|--body-file|-t|--title)\b/, 'V noční směně se text issues nemění. Napiš komentář.'],
+];
+
+// Agent jedná pod účtem vlastníka, GitHub ho proto od vlastníka neodliší.
+// V noci smí měnit jen stavové štítky, frontu si sám rozšířit ani zbavit větší akce nesmí.
+const SMI_PRIDAT = /^(stav:[\w-]+|blokovano|pro-vlastnika|ranni-zprava)$/;
+const SMI_ODEBRAT = /^(stav:[\w-]+|noc:ano)$/;
+
+function posudStitky(prikaz) {
+  for (const [, parametry] of prikaz.matchAll(/\bgh\s+(?:issue|pr)\s+(?:edit|create)\b([^|;&\n]*)/g)) {
+    for (const [, prepinac, hodnota] of parametry.matchAll(/\s(--add-label|--remove-label|--label|-l)(?:=|\s+)("[^"]*"|'[^']*'|\S+)/g)) {
+      const odebrat = prepinac === '--remove-label';
+      for (const stitek of hodnota.replace(/["']/g, '').split(',').map((s) => s.trim()).filter(Boolean)) {
+        if (!(odebrat ? SMI_ODEBRAT : SMI_PRIDAT).test(stitek))
+          return { rozhodnuti: 'deny', duvod: `V noční směně nesmíš ${odebrat ? 'odebrat' : 'přidat'} štítek ${stitek}. Dej úkolu štítek pro-vlastnika.` };
+      }
+    }
+  }
+  return null;
+}
+
+// Komentáře může psát kdokoli, v noci je proto čti jen s filtrem na vlastníka repozitáře.
+// Login musí být v příkazu napsaný doslova, proměnnou z příkazu hook ověřit nemůže.
+const FILTR_AUTORA = /select\(\s*\.(?:author|user)\.login\s*==\s*"([\w-]+)"\s*\)/g;
+const CTENI_KOMENTARU = [
+  /\bgh\s+(issue|pr)\s+view\b[^|;&\n]*\s(-c|--comments)\b/,
+  /\bgh\s+(issue|pr)\s+view\b[^|;&\n]*--json[\s=]+\S*\b(comments|reviews|latestReviews)\b/,
+  /\bgh\s+api\b[^|;&\n]*\/(comments|reviews|timeline|events)\b/,
+];
+
+function posudKomentare(prikaz, zjistiVlastnika) {
+  if (!CTENI_KOMENTARU.some((vzor) => vzor.test(prikaz))) return null;
+  const loginy = [...prikaz.matchAll(FILTR_AUTORA)].map((m) => m[1]);
+  if (loginy.length) {
+    const vlastnik = zjistiVlastnika();
+    if (vlastnik && loginy.every((l) => l.toLowerCase() === vlastnik.toLowerCase())) return null;
+  }
+  return {
+    rozhodnuti: 'deny',
+    duvod: 'V noční směně čti komentáře jen od vlastníka repozitáře, login napiš doslova: gh issue view <č> --json comments --jq \'.comments[] | select(.author.login == "<login vlastníka>") | .body\'',
+  };
+}
+
+// Noční práce patří jen do větví claude/, aby ji vlastník ráno poznal a nic jiného nepřepsala.
+function posudPushVNoci(prikaz) {
+  for (const [, zbytek] of prikaz.matchAll(/\bgit\s+push\b([^|;&\n]*)/g)) {
+    const [, ...refspecy] = zbytek.replace(/["']/g, '').trim().split(/\s+/).filter((a) => a && !a.startsWith('-'));
+    const cile = refspecy.map((r) => r.split(':').pop().replace(/^refs\/heads\//, ''));
+    if (cile.some((c) => !c.startsWith('claude/')))
+      return { rozhodnuti: 'deny', duvod: 'V noční směně se pushuje jen do větví claude/ukol-<číslo>-<popis>.' };
+  }
+  return null;
+}
+
+function posudDen(prikaz, zjistiPR) {
   for (const [vzor, duvod] of ZAKAZANE) if (vzor.test(prikaz)) return { rozhodnuti: 'deny', duvod };
   const push = posudPush(prikaz);
   if (push) return push;
@@ -76,6 +139,26 @@ export function posud(prikaz, zjistiPR = infoPR) {
   if (merge) return merge;
   for (const [vzor, duvod] of DOTAZ) if (vzor.test(prikaz)) return { rozhodnuti: 'ask', duvod };
   return null;
+}
+
+export function posud(prikaz, zjistiPR = infoPR, prostredi = process.env, zjistiVlastnika = vlastnikRepozitare) {
+  if (!jeNoc(prostredi)) return posudDen(prikaz, zjistiPR);
+  for (const [vzor, duvod] of ZAKAZANE_V_NOCI) if (vzor.test(prikaz)) return { rozhodnuti: 'deny', duvod };
+  const vysledek = posudDen(prikaz, zjistiPR);
+  if (vysledek?.rozhodnuti === 'deny') return vysledek;
+  const noc = posudStitky(prikaz) ?? posudPushVNoci(prikaz) ?? posudKomentare(prikaz, zjistiVlastnika);
+  if (noc) return noc;
+  if (vysledek?.rozhodnuti === 'ask')
+    return { rozhodnuti: 'deny', duvod: `${vysledek.duvod} V noční směně není koho se zeptat: dej úkolu štítek pro-vlastnika a pokračuj dalším.` };
+  return vysledek;
+}
+
+function vlastnikRepozitare() {
+  try {
+    return execFileSync('gh', ['repo', 'view', '--json', 'owner', '--jq', '.owner.login'], { encoding: 'utf8', timeout: 20000 }).trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 function infoPR(cislo) {
@@ -97,12 +180,14 @@ async function main() {
   try {
     prikaz = JSON.parse(vstup).tool_input?.command ?? '';
   } catch {
-    vystup({ rozhodnuti: 'ask', duvod: 'Strážce příkazů nedostal platný vstup. Příkaz nešlo ověřit.' });
+    vystup({ rozhodnuti: jeNoc() ? 'deny' : 'ask', duvod: 'Strážce příkazů nedostal platný vstup. Příkaz nešlo ověřit.' });
     return;
   }
   const vysledek = posud(prikaz);
   if (vysledek) vystup(vysledek);
 }
+
+// Když hook spadne, Claude Code akci pustí. Proto se při chybě rozhoduje výslovně.
 
 function vystup({ rozhodnuti, duvod }) {
   process.stdout.write(JSON.stringify({
@@ -110,4 +195,5 @@ function vystup({ rozhodnuti, duvod }) {
   }));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  main().catch(() => vystup({ rozhodnuti: jeNoc() ? 'deny' : 'ask', duvod: 'Strážce příkazů selhal. Příkaz nešlo ověřit.' }));

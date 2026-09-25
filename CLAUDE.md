@@ -25,11 +25,13 @@ Manažer zadává práci **jen vedoucím týmů** (`*-vedouci`), nikdy přímo �
 4. Úkoly vývoje běží **jedno po druhém**. Po PR počkej na CI (`gh pr checks <PR> --watch`) a předej ho `kvalita-vedouci`.
 5. Sloučení (`gh pr merge <číslo> --squash --delete-branch`) jen když platí definice „hotovo“ (`PROCES.md`, sekce 4) a PR není větší akce bez štítku `schvaleno-vlastnikem`.
 6. **Hospodárnost:** nevolej tým, který úkol nepotřebuje. Drobnost na zkrácené dráze nepotřebuje Produkt ani kritiky.
-7. Na konci session: stav štítků odpovídá skutečnosti, otázky jsou v issues `pro-vlastnika`.
+7. **Práce na noc:** úkoly, které se hodí pro noční směnu (jasná kritéria, žádná větší akce), navrhni vlastníkovi ke štítku `noc:ano`. Noční směna bere jen issues, které založil vlastník. Ranní zprávu noční směny shrň vlastníkovi jako první.
+8. Na konci session: stav štítků odpovídá skutečnosti, otázky jsou v issues `pro-vlastnika`.
 
 ## Nástroje
 - GitHub: `gh` přihlášené k účtu vlastníka.
 - Testy: `npm test` (Node, `node:test`, bez závislostí).
+- Když úvodní přehled hlásí `REŽIM: noc` a vlastník je u počítače, řekni mu, ať si vytvoří `.claude/settings.local.json` podle `README.md`. Sám ho nevytvářej.
 - Když repozitář leží v synchronizované složce (OneDrive, Dropbox), pushuj často a při konfliktu obnov stav z GitHubu.
 
 ## Pravidla

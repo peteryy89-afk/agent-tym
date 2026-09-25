@@ -1,6 +1,7 @@
 // SessionStart hook: na začátku session vypíše manažerovi stav úkolů podle štítků.
-// Když gh nefunguje, mlčí, aby nezablokoval start session.
+// Když gh nefunguje, vypíše jen režim, aby nezablokoval start session.
 import { execFileSync } from 'node:child_process';
+import { jeNoc } from './rezim.mjs';
 
 function issues(stitek) {
   try {
@@ -13,13 +14,20 @@ function issues(stitek) {
 }
 
 const SEKCE = [
+  ['ranni-zprava', 'Ranní zpráva noční směny'],
   ['pro-vlastnika', 'Otázky pro vlastníka'],
   ['stav:ceka-na-vlastnika', 'Čeká na schválení vlastníkem'],
   ['blokovano', 'Blokováno'],
   ['stav:revize', 'V revizi'],
   ['stav:rozpracovano', 'Rozpracováno'],
   ['stav:pripraveno', 'Připraveno'],
+  ['noc:ano', 'Ve frontě na noční směnu'],
 ];
+
+// Režim vypíše vždy, i když gh nefunguje: vlastník tak hned vidí, že mu chybí denní režim.
+console.log(jeNoc()
+  ? 'REŽIM: noc (pojistky noční směny, nic se neslučuje). Pro práci s vlastníkem chybí AGENT_TYM_DEN=1 v .claude/settings.local.json.'
+  : 'REŽIM: den.');
 
 const radky = [];
 for (const [stitek, nazev] of SEKCE) {

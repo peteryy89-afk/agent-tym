@@ -18,6 +18,7 @@
     "ask": [
       "Edit(PROCES.md)",
       "Edit(CLAUDE.md)",
+      "Edit(NOCNI-SMENA.md)",
       "Edit(.claude/**)",
       "Edit(.github/**)"
     ],
@@ -61,6 +62,12 @@
         "matcher": "Write|Edit|NotebookEdit",
         "hooks": [
           { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/strazce-zapisu.mjs\"", "timeout": 30 }
+        ]
+      },
+      {
+        "matcher": "mcp__.*|Agent|Task",
+        "hooks": [
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/strazce-noci.mjs\"", "timeout": 30 }
         ]
       }
     ]
