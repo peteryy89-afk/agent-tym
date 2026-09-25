@@ -50,11 +50,17 @@ test('strážce příkazů zachytí i zápis typický pro PowerShell (revize PR 
     assert.equal(vyrok(p), 'deny', p);
     assert.equal(vyrok(p, {}), 'deny', `v noci: ${p}`);
   }
-  for (const p of ['Set-Content .claude\\settings.json x', 'Copy-Item x .github\\workflows\\a.yml', 'remove-item PROCES.md', 'Out-File -FilePath claude.md']) {
+  for (const p of ['Set-Content .claude\\settings.json x', 'Copy-Item x .github\\workflows\\a.yml', 'remove-item PROCES.md', 'Out-File -FilePath claude.md',
+    'sc PROCES.md x', 'git status; del .claude\\settings.json']) {
     assert.equal(vyrok(p), 'ask', p);
   }
-  for (const p of ['git commit -m "Oprava"', 'git commit --amend --no-edit', 'Get-Content README.md', 'gh issue list']) {
+  for (const p of ['git commit -m "Oprava"', 'git commit --amend --no-edit', 'Get-Content README.md', 'gh issue list',
+    'git commit -m "Uprav test, jak mi řekl vlastník (CLAUDE.md)"', 'git commit -m "Čekám na ni, pak .claude/hooks"']) {
     assert.equal(vyrok(p), 'povoleno', p);
+    assert.equal(vyrok(p, {}), 'povoleno', `v noci: ${p}`);
+  }
+  for (const p of ['& "gh.exe" auth token', "& 'C:\\Program Files\\GitHub CLI\\gh.exe' auth token", '/usr/bin/gh secret list']) {
+    assert.equal(vyrok(p), 'deny', p);
   }
 });
 

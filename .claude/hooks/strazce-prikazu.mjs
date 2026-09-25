@@ -28,7 +28,7 @@ const DOTAZ = [
   [/\bpip3?\s+install\b/, 'Nová závislost je větší akce (PROCES.md, sekce 5).'],
   [/schvaleno-vlastnikem/, 'Štítek schvaleno-vlastnikem smí dát jen vlastník. Potvrď, jen pokud jsi to právě schválil ty.'],
   // Včetně příkazů PowerShellu. Bez rozlišení velikosti písmen, Windows (NTFS) ho nerozlišuje.
-  [new RegExp(String.raw`(\bsed\s+(-\w*\s+)*-i|\btee\b|\bcp\b|\bmv\b|\brm\b|>|\b(Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|Remove-Item|Rename-Item|New-Item|sc|ac|ni|cpi|mi|ri|del|copy|move)\b|WriteAll)[^|;&]*` + CHRANENE_CESTY, 'i'), 'Zápis do chráněného souboru přes příkazovou řádku. Změnu schvaluje vlastník (PROCES.md, sekce 6).'],
+  [new RegExp(String.raw`(\bsed\s+(-\w*\s+)*-i|\btee\b|\bcp\b|\bmv\b|\brm\b|>|\b(Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|Remove-Item|Rename-Item|New-Item|Tee-Object)\b|WriteAll|(?:^|[;&|({]\s*)(?:sc|ac|ni|mi|ri|cpi|del|copy|move)\s)[^|;&]*` + CHRANENE_CESTY, 'i'), 'Zápis do chráněného souboru přes příkazovou řádku. Změnu schvaluje vlastník (PROCES.md, sekce 6).'],
 ];
 
 // Náhrada ochrany větve z GitHub Pro: sloučit jde jen PR se zelenou CI (PROCES.md, sekce 4).
@@ -148,8 +148,10 @@ function posudDen(prikaz, zjistiPR) {
 
 // PowerShell (Windows) bere názvy programů bez ohledu na velikost písmen a s příponou .exe
 // a zpětný apostrof v něm jen escapuje znak (g`h = gh). Vzory proto porovnáváme s normalizovaným příkazem.
+// Cesta a uvozovky před programem (& 'C:\\Program Files\\GitHub CLI\\gh.exe') se odstraní.
+const PROGRAM = /["']?(?:[^\s"'|;&]*[\\/])?\b(gh|git|npm|pnpm|yarn|npx|pip3?|node)(?:\.exe)?\b["']?/gi;
 export function normalizuj(prikaz) {
-  return prikaz.replace(/`/g, '').replace(/\b(gh|git|npm|pnpm|yarn|npx|pip3?|node)(\.exe)?\b/gi, (_, program) => program.toLowerCase());
+  return prikaz.replace(/`/g, '').replace(PROGRAM, (_, program) => program.toLowerCase());
 }
 
 export function posud(puvodni, zjistiPR = infoPR, prostredi = process.env, zjistiVlastnika = vlastnikRepozitare) {
