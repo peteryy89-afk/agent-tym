@@ -51,7 +51,7 @@ function falesnyGh({ bezProjektu = false } = {}) {
         { id: 'D1', content: { title: 'koncept bez url' } },
       ] };
     }
-    if (prikaz === 'api') return [{ html_url: U(1), labels: [{ name: 'stav:revize' }] }, { html_url: U(2), labels: [{ name: 'stav:napad' }] }];
+    if (prikaz === 'api') return [[{ html_url: U(1), labels: [{ name: 'stav:revize' }] }, { html_url: U(2), labels: [{ name: 'stav:napad' }] }]];
     if (prikaz === 'project' && pod === 'item-add') return { id: 'NOVA' };
     if (prikaz === 'project' && pod === 'item-edit') return null;
     throw new Error(`neočekávané volání ${a.join(' ')}`);

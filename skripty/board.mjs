@@ -61,7 +61,7 @@ export async function srovnej({ repo, gh = ghCli, nasucho = false, vypis = conso
   const polozky = (await gh(['project', 'item-list', String(projekt.number), '--owner', vlastnik, '--format', 'json', '--limit', '1000']))
     .items.filter((i) => i.content?.url && i.content.repository === repo)
     .map((i) => ({ id: i.id, url: i.content.url, stav: i[klic] ?? null }));
-  const otevrene = (await gh(['api', `repos/${repo}/issues?state=open&per_page=100`]))
+  const otevrene = (await gh(['api', '--paginate', '--slurp', `repos/${repo}/issues?state=open&per_page=100`])).flat()
     .map((i) => ({ url: i.html_url, stitky: (i.labels ?? []).map((l) => l.name) }));
 
   const akce = naplanuj(polozky, otevrene);
