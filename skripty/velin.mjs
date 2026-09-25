@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { repozitar } from '../.claude/nastroje/github-noc.mjs';
+import { repozitar, vyberFrontu } from '../.claude/nastroje/github-noc.mjs';
 import { SOUBOR as SOUBOR_ZAZNAMU } from '../.claude/hooks/zaznam-aktivity.mjs';
 
 export const KOREN = fileURLToPath(new URL('../', import.meta.url));
@@ -74,6 +74,21 @@ export function mimoRetez(spustil, cil, tymy) {
 
 // ---------- záznam aktivity ----------
 
+// Záznam může zapsat kterýkoli místní proces, proto se každý řádek ověří a nechají se jen známá pole.
+const UDALOSTI = new Set(['session-start', 'session-konec', 'spusteni', 'start', 'konec']);
+const ID = /^[0-9a-f]{10}$/;
+const TYP = /^[\w:.-]{1,64}$/;
+export function overRadek(u) {
+  if (!u || typeof u !== 'object' || !UDALOSTI.has(u.udalost) || typeof u.cas !== 'string') return null;
+  const pole = (hodnota, vzor) => (typeof hodnota === 'string' && vzor.test(hodnota) ? hodnota : null);
+  return {
+    cas: u.cas, udalost: u.udalost, rezim: u.rezim === 'den' || u.rezim === 'noc' ? u.rezim : null,
+    session: pole(u.session, ID), agent: pole(u.agent, ID), volajici: pole(u.volajici, ID),
+    typ: pole(u.typ, TYP), cil: pole(u.cil, TYP), volajiciTyp: pole(u.volajiciTyp, TYP), model: pole(u.model, TYP),
+    popis: typeof u.popis === 'string' ? u.popis.slice(0, 200) : null,
+  };
+}
+
 export function nactiZaznam(soubor = SOUBOR_ZAZNAMU) {
   const udalosti = [];
   for (const s of [soubor.replace(/\.jsonl$/, '.1.jsonl'), soubor]) {
@@ -85,8 +100,8 @@ export function nactiZaznam(soubor = SOUBOR_ZAZNAMU) {
     }
     for (const r of text.split('\n')) {
       try {
-        const u = JSON.parse(r);
-        if (u && typeof u === 'object' && typeof u.udalost === 'string') udalosti.push(u);
+        const u = overRadek(JSON.parse(r));
+        if (u) udalosti.push(u);
       } catch {}
     }
   }
@@ -105,19 +120,20 @@ export function vyhodnotAktivitu(udalosti, ted = Date.now()) {
     else if (u.udalost === 'spusteni') cekajici.push({ ...u, t });
     else if (u.udalost === 'start' && u.agent) {
       // Spuštění přes nástroj Agent nese popis a volajícího, start podagenta jeho ID. Páruje se
-      // podle session a typu agenta, nejstarší nespárované spuštění do 2 minut.
-      const i = cekajici.findIndex((c) => c.session === u.session && c.cil === u.typ && t >= c.t && t - c.t < 120_000);
+      // podle session a typu agenta s nejnovějším nespárovaným spuštěním do 2 minut (starší mohl
+      // strážce noci zamítnout).
+      const i = cekajici.findLastIndex((c) => c.session === u.session && c.cil === u.typ && t >= c.t && t - c.t < 120_000);
       const sp = i >= 0 ? cekajici.splice(i, 1)[0] : null;
       behy.set(u.agent, {
-        id: u.agent, typ: u.typ ?? '?', popis: sp?.popis ?? u.popis ?? null, model: sp?.model ?? null,
+        id: u.agent, typ: u.typ ?? '?', popis: sp?.popis ?? null, model: sp?.model ?? null,
         rezim: u.rezim, start: t, konec: null,
         spustil: sp ? (sp.volajiciTyp ?? (sp.volajici ? '?' : 'manažer')) : null,
       });
     } else if (u.udalost === 'konec' && behy.has(u.agent)) behy.get(u.agent).konec = t;
   }
   const vse = [...behy.values()].sort((a, b) => b.start - a.start);
-  const posledni = {};
-  const zaTyden = {};
+  const posledni = Object.create(null);
+  const zaTyden = Object.create(null);
   for (const b of vse) {
     const k = b.konec ?? b.start;
     if (!(posledni[b.typ] >= k)) posledni[b.typ] = k;
@@ -172,8 +188,10 @@ export async function nactiGitHub(repo, api = ghApi) {
     }
     return { cislo: p.number, nazev: p.title, vetev: p.head?.ref ?? '', stitky: stitky(p), kontroly };
   }));
+  const vlastnik = info.owner?.login ?? null;
   return {
-    vlastnik: info.owner?.login ?? null,
+    vlastnik,
+    fronta: vlastnik ? vyberFrontu(issues, vlastnik) : [],
     issues: issues.filter((i) => !i.pull_request).map((i) => ({ cislo: i.number, nazev: i.title, stitky: stitky(i), autor: i.user?.login ?? null })),
     pr,
     zpravy: zpravy.filter((z) => !z.pull_request).map((z) => ({ cislo: z.number, nazev: z.title, stav: z.state, vytvoreno: z.created_at })),
@@ -185,9 +203,9 @@ export async function nactiGitHub(repo, api = ghApi) {
 export function sestavStav({ agenti, udalosti, github, chybaGitHubu = null, repo = null, ted = Date.now() }) {
   const tymy = sestavTymy(agenti);
   const aktivita = vyhodnotAktivitu(udalosti, ted);
-  const modely = Object.fromEntries(agenti.map((a) => [a.jmeno, a.model]));
-  const tymAgenta = Object.fromEntries(tymy.flatMap((t) => t.clenove.map((c) => [c, t.nazev])));
-  const doplnit = (b) => ({ ...b, model: b.model ?? modely[b.typ] ?? null, tym: tymAgenta[b.typ] ?? null, mimoRetez: mimoRetez(b.spustil, b.typ, tymy) });
+  const modely = new Map(agenti.map((a) => [a.jmeno, a.model]));
+  const tymAgenta = new Map(tymy.flatMap((t) => t.clenove.map((c) => [c, t.nazev])));
+  const doplnit = (b) => ({ ...b, model: b.model ?? modely.get(b.typ) ?? null, tym: tymAgenta.get(b.typ) ?? null, mimoRetez: mimoRetez(b.spustil, b.typ, tymy) });
   const stav = {
     cas: new Date(ted).toISOString(), repo, chybaGitHubu,
     tymy: tymy.map((t) => ({
@@ -217,12 +235,11 @@ export function sestavStav({ agenti, udalosti, github, chybaGitHubu = null, repo
         .concat([{ stitek: null, nazev: 'Bez stavu', issues: issues.filter((i) => !STAVY.some(([s]) => ma(i, s)) && !ma(i, 'pro-vlastnika') && !ma(i, 'ranni-zprava')) }]),
       pr,
       proVlastnika: {
-        issues: issues.filter((i) => ma(i, 'pro-vlastnika') || ma(i, 'ranni-zprava')),
+        issues: issues.filter((i) => ma(i, 'pro-vlastnika') || ma(i, 'ranni-zprava') || ma(i, 'stav:ceka-na-vlastnika')),
         pr: pr.filter((p) => ma(p, 'stav:ceka-na-vlastnika') || (ma(p, 'vetsi-akce') && !ma(p, 'schvaleno-vlastnikem'))),
       },
       noc: {
-        fronta: issues.filter((i) => i.autor === vlastnik && ma(i, 'noc:ano') && ma(i, 'stav:pripraveno')
-          && !['vetsi-akce', 'blokovano', 'pro-vlastnika'].some((s) => ma(i, s))).slice(0, 3),
+        fronta: github.fronta.map((f) => issues.find((i) => i.cislo === f.cislo)).filter(Boolean),
         stop: issues.filter((i) => ma(i, 'noc:stop')),
         zpravy: github.zpravy,
       },
@@ -370,12 +387,9 @@ export function obsluha(ziskejStav, port) {
     if (pozadavek.method !== 'GET' && pozadavek.method !== 'HEAD') return posli(405, 'text/plain; charset=utf-8', 'Velín jen čte.', { Allow: 'GET, HEAD' });
     // Kontrola hlavičky Host brání DNS rebinding: cizí web se na server nedostane přes vlastní doménu.
     if (![`127.0.0.1:${p}`, `localhost:${p}`].includes(pozadavek.headers.host)) return posli(403, 'text/plain; charset=utf-8', 'Nepovolený Host.');
-    const cesta = pozadavek.url.split('?')[0];
-    if (cesta !== '/' && cesta !== '/api/stav') return posli(404, 'text/plain; charset=utf-8', 'Nenalezeno.');
+    if (pozadavek.url.split('?')[0] !== '/') return posli(404, 'text/plain; charset=utf-8', 'Nenalezeno.');
     try {
-      const stav = await ziskejStav();
-      if (cesta === '/api/stav') return posli(200, 'application/json; charset=utf-8', JSON.stringify(stav, null, 2));
-      return posli(200, 'text/html; charset=utf-8', vykresli(stav));
+      return posli(200, 'text/html; charset=utf-8', vykresli(await ziskejStav()));
     } catch {
       return posli(500, 'text/plain; charset=utf-8', 'Velín nemohl sestavit přehled.');
     }

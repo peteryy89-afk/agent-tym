@@ -9,6 +9,7 @@ import { zaznam, zapis, ocisti, MAX_VELIKOST } from '../.claude/hooks/zaznam-akt
 import {
   nactiAgenty, sestavTymy, mimoRetez, nactiZaznam, vyhodnotAktivitu, nactiGitHub, sestavStav, vykresli, obsluha, zdrojStavu,
 } from '../skripty/velin.mjs';
+import { vyberFrontu } from '../.claude/nastroje/github-noc.mjs';
 
 const HOOK = path.join(import.meta.dirname, '..', '.claude', 'hooks', 'zaznam-aktivity.mjs');
 const DEN = { AGENT_TYM_DEN: '1' };
@@ -26,13 +27,20 @@ test('záznam neobsahuje cesty, zadání ani ID v plném znění', () => {
   };
   const r = zaznam(vstup, DEN, new Date(T0));
   const text = JSON.stringify(r);
-  assert.deepEqual(Object.keys(r).sort(), ['agent', 'cas', 'popis', 'rezim', 'session', 'typ', 'udalost']);
-  for (const zakazane of ['nekdo', 'Tajne', 'transcript', 'ghp_', 'Další řádek', 'sess-1234567890', 'agent-abc']) {
+  assert.deepEqual(Object.keys(r).sort(), ['agent', 'cas', 'rezim', 'session', 'typ', 'udalost']);
+  for (const zakazane of ['nekdo', 'Tajne', 'transcript', 'ghp_', 'Implementuj', 'sess-1234567890', 'agent-abc']) {
     assert.ok(!text.includes(zakazane), `v záznamu je ${zakazane}`);
   }
   assert.equal(r.typ, 'backend');
   assert.equal(r.rezim, 'den');
-  assert.match(r.popis, /^Implementuj issue #4 v ‹cesta› a ‹klíč›$/);
+});
+
+test('popis s cestou se celý skryje, i když cesta obsahuje mezery', () => {
+  for (const s of ['Oprav C:\\Users\\jan\\Sdilene - Firma X\\Tajny projekt\\a.txt', 'Čti \\\\server\\share\\x', 'uprav ~/repo',
+    'viz /Users/jan/Tajne veci', 'soubor d:/data/x']) {
+    assert.equal(ocisti(s), '‹popis skrytý: obsahuje cestu›', s);
+  }
+  assert.equal(ocisti('Oprav chybu v a/b.js a ghp_abcdefghijklmnopqrstuvwxyz0123'), 'Oprav chybu v a/b.js a ‹klíč›');
 });
 
 test('popis je jeden řádek bez řídicích znaků a nejvýše 120 znaků', () => {
@@ -78,12 +86,11 @@ test('hook nikdy neblokuje: neplatný vstup skončí kódem 0 bez výstupu', () 
 
 // ---------- agenti a týmy ----------
 
-test('tým má 36 agentů v 9 týmech a nikdo nechybí', () => {
+test('Velín ukáže všechny agenty v 9 týmech a nikdo nechybí', () => {
   const agenti = nactiAgenty();
   const tymy = sestavTymy(agenti);
-  assert.equal(agenti.length, 36);
   assert.equal(tymy.length, 9);
-  assert.equal(tymy.flatMap((t) => t.clenove).length, 36);
+  assert.deepEqual(tymy.flatMap((t) => t.clenove).sort(), agenti.map((a) => a.jmeno).sort());
   assert.ok(tymy.every((t) => t.clenove[0] === t.vedouci));
   assert.deepEqual(tymy.map((t) => t.nazev), ['Produkt', 'Vývoj', 'Kvalita', 'Provoz', 'Marketing', 'Objevování', 'Revize', 'Právo', 'Platforma']);
   assert.ok(tymy[1].clenove.includes('backend'));
@@ -113,6 +120,7 @@ const UDALOSTI = [
   { cas: iso(1), udalost: 'start', session: 's1', agent: 'a1', typ: 'vyvoj-vedouci', popis: 'dlouhé zadání', rezim: 'den' },
   { cas: iso(2), udalost: 'spusteni', session: 's1', volajici: 'a1', volajiciTyp: 'vyvoj-vedouci', cil: 'backend', popis: 'Skript sync', model: 'sonnet' },
   { cas: iso(2), udalost: 'start', session: 's1', agent: 'a2', typ: 'backend', rezim: 'den' },
+  { cas: iso(4), udalost: 'spusteni', session: 's1', volajici: null, volajiciTyp: null, cil: 'tester', popis: 'Zamítnutý pokus', model: 'opus' },
   { cas: iso(5), udalost: 'spusteni', session: 's1', volajici: null, volajiciTyp: null, cil: 'tester', popis: 'Obchvat', model: null },
   { cas: iso(5), udalost: 'start', session: 's1', agent: 'a3', typ: 'tester', rezim: 'den' },
   { cas: iso(8), udalost: 'konec', session: 's1', agent: 'a3', typ: 'tester' },
@@ -132,14 +140,33 @@ test('aktivita: kdo běží, kdo skončil, kdo spustil koho a nejasné běhy', (
   assert.equal(a.zaTyden.tester, 1);
   assert.equal(a.posledni.tester, T0 + 8 * 60000);
   assert.equal(a.historie.find((b) => b.typ === 'tester').konec, T0 + 8 * 60000);
+  assert.equal(a.historie.find((b) => b.typ === 'tester').popis, 'Obchvat', 'páruje se nejnovější spuštění');
+});
+
+test('nepřátelský řádek v záznamu Velín neshodí', () => {
+  const slozka = docasna();
+  const soubor = path.join(slozka, 'aktivita.jsonl');
+  const radky = [
+    { cas: iso(0), udalost: 'start', session: 'aaaaaaaaaa', agent: 'bbbbbbbbbb', typ: { toString: 1 } },
+    { cas: iso(0), udalost: 'start', session: 'aaaaaaaaaa', agent: 'cccccccccc', typ: 'constructor', popis: '<img src=x>' },
+    { cas: iso(0), udalost: 'start', session: 'aaaaaaaaaa', agent: 'dddddddddd', typ: '__proto__', rezim: '<b>' },
+  ];
+  fs.writeFileSync(soubor, radky.map((x) => JSON.stringify(x)).join('\n'));
+  const stav = sestavStav({ agenti: nactiAgenty(), udalosti: nactiZaznam(soubor), github: null, ted: T0 + 60000 });
+  const html = vykresli(stav);
+  assert.equal(stav.bezi.length, 3);
+  assert.ok(!html.includes('native code'));
+  assert.ok(!html.includes('<img'));
+  assert.ok(stav.bezi.every((b) => b.rezim === null), 'neplatný režim se zahodí');
 });
 
 test('nactiZaznam přeskočí poškozené řádky a čte i starší soubor', () => {
   const slozka = docasna();
   const soubor = path.join(slozka, 'aktivita.jsonl');
-  fs.writeFileSync(path.join(slozka, 'aktivita.1.jsonl'), '{"udalost":"start","agent":"stary"}\n');
-  fs.writeFileSync(soubor, 'poškozeno\n{"udalost":"konec","agent":"stary"}\n[1]\n');
+  fs.writeFileSync(path.join(slozka, 'aktivita.1.jsonl'), '{"cas":"2026-09-25T10:00:00Z","udalost":"start","agent":"stary"}\n');
+  fs.writeFileSync(soubor, 'poškozeno\n{"cas":"2026-09-25T10:01:00Z","udalost":"konec","agent":"stary"}\n[1]\n{"udalost":"jina"}\n');
   assert.deepEqual(nactiZaznam(soubor).map((u) => u.udalost), ['start', 'konec']);
+  assert.equal(nactiZaznam(soubor)[0].agent, null, 'neplatné ID se zahodí');
   assert.deepEqual(nactiZaznam(path.join(slozka, 'neexistuje.jsonl')), []);
 });
 
@@ -154,6 +181,8 @@ function falesnyGitHub() {
       { number: 8, title: 'Ranní zpráva 2026-09-25', labels: [{ name: 'ranni-zprava' }, { name: 'pro-vlastnika' }], user: { login: 'vlastnik' } },
       { number: 10, title: 'PR jako issue', labels: [], pull_request: {} },
       { number: 11, title: 'Stop', labels: [{ name: 'noc:stop' }], user: { login: 'vlastnik' } },
+      { number: 12, title: 'Hotovo ke sloučení', labels: [{ name: 'stav:ceka-na-vlastnika' }], user: { login: 'vlastnik' } },
+      { number: 3, title: 'Starší úkol', labels: [{ name: 'noc:ano' }, { name: 'stav:pripraveno' }], user: { login: 'Vlastnik' } },
     ],
     'repos/vlastnik/tym/pulls?state=open&per_page=50': [
       { number: 10, title: 'Přidej sync', head: { ref: 'claude/ukol-4-sync', sha: 'a'.repeat(40) }, labels: [{ name: 'stav:ceka-na-vlastnika' }] },
@@ -181,14 +210,15 @@ function falesnyGitHub() {
 
 test('GitHub: issues bez PR, nejnovější výsledek kontrol, fronta jen od vlastníka', async () => {
   const gh = await nactiGitHub('vlastnik/tym', falesnyGitHub().api);
-  assert.deepEqual(gh.issues.map((i) => i.cislo), [4, 5, 8, 11]);
+  assert.deepEqual(gh.issues.map((i) => i.cislo), [4, 5, 8, 11, 12, 3]);
   assert.deepEqual(gh.pr[0].kontroly, { 'chranene-soubory': 'success', testy: 'in_progress' });
   const stav = sestavStav({ agenti: nactiAgenty(), udalosti: UDALOSTI, github: gh, repo: 'vlastnik/tym', ted: T0 + 600000 });
-  assert.deepEqual(stav.github.noc.fronta.map((i) => i.cislo), [4]);
+  assert.deepEqual(stav.github.noc.fronta.map((i) => i.cislo), [3, 4], 'stejně jako github-noc: od nejstaršího, login bez ohledu na velikost');
+  assert.deepEqual(gh.fronta, vyberFrontu((await falesnyGitHub().api('repos/vlastnik/tym/issues?state=open&per_page=100')), 'vlastnik'));
   assert.deepEqual(stav.github.noc.stop.map((i) => i.cislo), [11]);
-  assert.deepEqual(stav.github.proVlastnika.issues.map((i) => i.cislo), [8]);
+  assert.deepEqual(stav.github.proVlastnika.issues.map((i) => i.cislo), [8, 12]);
   assert.deepEqual(stav.github.proVlastnika.pr.map((p) => p.cislo), [10]);
-  assert.deepEqual(stav.github.sloupce.find((s) => s.stitek === 'stav:pripraveno').issues.map((i) => i.cislo), [4, 5]);
+  assert.deepEqual(stav.github.sloupce.find((s) => s.stitek === 'stav:pripraveno').issues.map((i) => i.cislo), [4, 5, 3]);
   assert.equal(stav.bezi.find((b) => b.typ === 'backend').tym, 'Vývoj');
   assert.equal(stav.historie.find((b) => b.typ === 'tester').mimoRetez, true);
 });
@@ -255,8 +285,7 @@ test('server: jen GET, jen místní Host, CSP bez skriptů', async () => {
     assert.equal((await pozadavek(port, { host: 'utocnik.example:80' })).kod, 403);
     assert.equal((await pozadavek(port, { host: `127.0.0.1:${port}.utocnik.example` })).kod, 403);
     assert.equal((await pozadavek(port, { cesta: '/../.env' })).kod, 404);
-    const json = await pozadavek(port, { cesta: '/api/stav' });
-    assert.equal(JSON.parse(json.telo).chybaGitHubu, 'test');
+    assert.equal((await pozadavek(port, { cesta: '/api/stav' })).kod, 404);
   } finally {
     server.close();
   }

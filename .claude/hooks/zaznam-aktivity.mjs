@@ -1,5 +1,6 @@
 // Hook pro Velín: zapisuje, kdy který agent začal a skončil (SubagentStart, SubagentStop,
 // spuštění přes nástroj Agent a začátek a konec session) do `.agent-tym/aktivita.jsonl`.
+// Popis úkolu bere jen z krátkého `description` nástroje Agent, nikdy ze zadání podagenta.
 // Nic nerozhoduje a nikdy neblokuje: vždy skončí kódem 0 a nic nevypíše.
 // Zapisuje jen povolená pole. Vstup hooku obsahuje cesty (cwd, transcript_path) a celé zadání
 // podagenta, které se do záznamu nesmí dostat. Záznam je v .gitignore a nikam se neposílá.
@@ -16,14 +17,17 @@ const MAX_POPIS = 120;
 const zkrat = (id) => (id ? crypto.createHash('sha256').update(String(id)).digest('hex').slice(0, 10) : null);
 const typ = (t) => (typeof t === 'string' && /^[\w:.-]{1,64}$/.test(t) ? t : null);
 
+// Cesty můžou obsahovat mezery (například „Sdílené - Firma“), takže je nejde spolehlivě
+// vymaskovat. Popis s cestou se proto celý zahodí.
+const CESTA = /[A-Za-z]:[\\/]|\\\\|~\/|\/(?:Users|home|mnt|tmp|var|root|private)\//i;
+
 // Popis úkolu: jeden řádek, bez řídicích znaků, cest a klíčů, nejvýše MAX_POPIS znaků.
 export function ocisti(text) {
   if (typeof text !== 'string') return null;
   const radek = text.split(/\r?\n/).find((r) => r.trim()) ?? '';
+  if (CESTA.test(radek)) return '‹popis skrytý: obsahuje cestu›';
   const cisty = radek
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
-    .replace(/[A-Za-z]:[\\/][^\s"'`]*/g, '‹cesta›')
-    .replace(/\/(?:Users|home|mnt|tmp|var|root)\/[^\s"'`]*/g, '‹cesta›')
     .replace(/\b(?:gh[pousr]_|github_pat_|sk-ant-|sk-|AKIA|xox[abpr]-)[A-Za-z0-9_-]{10,}/g, '‹klíč›')
     .replace(/\s+/g, ' ')
     .trim();
@@ -48,7 +52,7 @@ export function zaznam(data, prostredi = process.env, ted = new Date()) {
       };
     }
     case 'SubagentStart':
-      return { ...spolecne, udalost: 'start', agent: zkrat(data.agent_id), typ: typ(data.agent_type), popis: ocisti(data.task_prompt) };
+      return { ...spolecne, udalost: 'start', agent: zkrat(data.agent_id), typ: typ(data.agent_type) };
     case 'SubagentStop':
       return { ...spolecne, udalost: 'konec', agent: zkrat(data.agent_id), typ: typ(data.agent_type) };
     default:

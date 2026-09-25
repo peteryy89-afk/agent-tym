@@ -47,7 +47,11 @@
       {
         "matcher": "startup|resume",
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/prehled.mjs\"", "timeout": 60 },
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/prehled.mjs\"", "timeout": 60 }
+        ]
+      },
+      {
+        "hooks": [
           { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
         ]
       }
