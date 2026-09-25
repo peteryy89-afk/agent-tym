@@ -1,4 +1,4 @@
-// PreToolUse hook pro Bash: blokuje nebezpečné příkazy (PROCES.md, sekce 8).
+// PreToolUse hook pro Bash a PowerShell (Windows): blokuje nebezpečné příkazy (PROCES.md, sekce 8).
 // Druhá vrstva ochrany: hledání textu v příkazu jde obejít, obcházení je porušení procesu.
 // Hlavní pojistka je ochrana větve main na GitHubu (PROCES.md, sekce 6), tohle je druhá vrstva.
 import { execFileSync } from 'node:child_process';
@@ -10,10 +10,11 @@ const CHRANENE_CESTY = String.raw`(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitle
 const ZAKAZANE = [
   [/\bgit\b[^|;&]*\bpush\b[^|;&]*(\s--force\b|\s--force-with-lease\b|\s-[a-zA-Z]*f\b|\s\+\S+)/, 'Force push je zakázaný.'],
   [/--no-verify\b/, 'Přeskočení git hooků (--no-verify) je zakázané.'],
+  [/\bgit\b[^|;&]*\bcommit\b[^|;&]*\s-[a-zA-Z]*n\b/, 'Přeskočení git hooků (git commit -n) je zakázané.'],
   [/\bgit\b[^|;&]*\bpush\b[^|;&]*(\s(origin\s+)?|:)(refs\/heads\/)?(main|master)\b/, 'Přímý push do main je zakázaný. Použij větev a PR.'],
   [/\bgh\s+repo\s+(edit|delete|rename|archive)\b/, 'Změna nastavení repozitáře je větší akce pro vlastníka.'],
   [/\bgh\s+(secret|gist|auth|ssh-key|gpg-key)\b/, 'Práce s tajnými klíči, gisty a přihlášením je zakázaná.'],
-  [/(^|[\s'"/=<>])\.env(\.[\w.-]+)?\b/, 'Soubory .env agenti nečtou ani nezapisují.'],
+  [/(^|[\s'"/\\=<>])\.env(\.[\w.-]+)?\b/, 'Soubory .env agenti nečtou ani nezapisují.'],
   [/\bgh\b[^|;&]*\bapi\b[^|;&]*\/merges?\b/, 'Sloučení přes gh api obchází kontrolu CI. Použij gh pr merge <číslo>.'],
   [/\bgh\b[^|;&]*\bapi\b[^|;&]*\bgraphql\b[\s\S]*\bmergePullRequest\b/, 'Sloučení přes GraphQL obchází kontrolu CI. Použij gh pr merge <číslo>.'],
 ];
@@ -26,7 +27,8 @@ const DOTAZ = [
   [/\b(npm|pnpm|yarn)\s+(install|i|add)\s+\S/, 'Nová závislost je větší akce (PROCES.md, sekce 5).'],
   [/\bpip3?\s+install\b/, 'Nová závislost je větší akce (PROCES.md, sekce 5).'],
   [/schvaleno-vlastnikem/, 'Štítek schvaleno-vlastnikem smí dát jen vlastník. Potvrď, jen pokud jsi to právě schválil ty.'],
-  [new RegExp(String.raw`(\bsed\s+(-\w*\s+)*-i|\btee\b|\bcp\b|\bmv\b|\brm\b|>)[^|;&]*` + CHRANENE_CESTY), 'Zápis do chráněného souboru přes příkazovou řádku. Změnu schvaluje vlastník (PROCES.md, sekce 6).'],
+  // Včetně příkazů PowerShellu. Bez rozlišení velikosti písmen, Windows (NTFS) ho nerozlišuje.
+  [new RegExp(String.raw`(\bsed\s+(-\w*\s+)*-i|\btee\b|\bcp\b|\bmv\b|\brm\b|>|\b(Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|Remove-Item|Rename-Item|New-Item|Tee-Object)\b|WriteAll|(?:^|[;&|({]\s*)(?:sc|ac|ni|mi|ri|cpi|del|copy|move)\s)[^|;&]*` + CHRANENE_CESTY, 'i'), 'Zápis do chráněného souboru přes příkazovou řádku. Změnu schvaluje vlastník (PROCES.md, sekce 6).'],
 ];
 
 // Náhrada ochrany větve z GitHub Pro: sloučit jde jen PR se zelenou CI (PROCES.md, sekce 4).
@@ -144,7 +146,16 @@ function posudDen(prikaz, zjistiPR) {
   return null;
 }
 
-export function posud(prikaz, zjistiPR = infoPR, prostredi = process.env, zjistiVlastnika = vlastnikRepozitare) {
+// PowerShell (Windows) bere názvy programů bez ohledu na velikost písmen a s příponou .exe
+// a zpětný apostrof v něm jen escapuje znak (g`h = gh). Vzory proto porovnáváme s normalizovaným příkazem.
+// Cesta a uvozovky před programem (& 'C:\\Program Files\\GitHub CLI\\gh.exe') se odstraní.
+const PROGRAM = /["']?(?:[^\s"'|;&]*[\\/])?\b(gh|git|npm|pnpm|yarn|npx|pip3?|node)(?:\.exe)?\b["']?/gi;
+export function normalizuj(prikaz) {
+  return prikaz.replace(/`/g, '').replace(PROGRAM, (_, program) => program.toLowerCase());
+}
+
+export function posud(puvodni, zjistiPR = infoPR, prostredi = process.env, zjistiVlastnika = vlastnikRepozitare) {
+  const prikaz = normalizuj(puvodni);
   if (!jeNoc(prostredi)) return posudDen(prikaz, zjistiPR);
   for (const [vzor, duvod] of ZAKAZANE_V_NOCI) if (vzor.test(prikaz)) return { rozhodnuti: 'deny', duvod };
   const vysledek = posudDen(prikaz, zjistiPR);

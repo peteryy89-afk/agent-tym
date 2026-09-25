@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url';
 import { jeNoc } from './rezim.mjs';
 
 const TAJNE = /(^|\/)(\.env(\.[\w.-]+)?|[^/]+\.(pem|key|p12|pfx)|id_(rsa|ed25519)[^/]*)$/i;
-const CHRANENE = /^(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude\/.*|\.github\/.*)$/;
+// Bez rozlišení velikosti písmen: na Windows je .CLAUDE\settings.json tentýž soubor.
+const CHRANENE = /^(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude\/.*|\.github\/.*)$/i;
 
 // Cesty z Windows i POSIX na jednotný tvar, aby hook fungoval lokálně i v cloudu.
 const sjednot = (p) => p.replaceAll('\\', '/').replace(/\/+$/, '');
