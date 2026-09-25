@@ -19,7 +19,7 @@ const typ = (t) => (typeof t === 'string' && /^[\w:.-]{1,64}$/.test(t) ? t : nul
 
 // Cesty můžou obsahovat mezery (například „Sdílené - Firma“), takže je nejde spolehlivě
 // vymaskovat. Popis s cestou se proto celý zahodí.
-const CESTA = /[A-Za-z]:[\\/]|\\\\|~\/|\/(?:Users|home|mnt|tmp|var|root|private)\//i;
+const CESTA = /(?<![A-Za-z])[A-Za-z]:[\\/]|\\\\|~\/|\/(?:Users|home|mnt|tmp|var|root|private)\//i;
 
 // Popis úkolu: jeden řádek, bez řídicích znaků, cest a klíčů, nejvýše MAX_POPIS znaků.
 export function ocisti(text) {

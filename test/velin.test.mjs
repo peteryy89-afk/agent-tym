@@ -41,6 +41,7 @@ test('popis s cestou se celý skryje, i když cesta obsahuje mezery', () => {
     assert.equal(ocisti(s), '‹popis skrytý: obsahuje cestu›', s);
   }
   assert.equal(ocisti('Oprav chybu v a/b.js a ghp_abcdefghijklmnopqrstuvwxyz0123'), 'Oprav chybu v a/b.js a ‹klíč›');
+  assert.equal(ocisti('Oprav odkaz https://github.com/x/y'), 'Oprav odkaz https://github.com/x/y');
 });
 
 test('popis je jeden řádek bez řídicích znaků a nejvýše 120 znaků', () => {
