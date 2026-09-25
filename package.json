@@ -6,7 +6,8 @@
   "description": "Znovupoužitelný vývojový tým AI agentů pro Claude Code",
   "scripts": {
     "test": "node --test",
-    "velin": "node skripty/velin.mjs"
+    "velin": "node skripty/velin.mjs",
+    "board": "node skripty/board.mjs"
   },
   "engines": {
     "node": ">=20"

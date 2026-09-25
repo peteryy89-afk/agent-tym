@@ -13,6 +13,7 @@ Znovupoužitelný vývojový tým AI agentů pro Claude Code. Úkol vezme, rozpl
 | `.claude/hooks/` | `strazce-prikazu` (nebezpečné příkazy), `strazce-zapisu` (tajné klíče a chráněné soubory), `strazce-noci` (konektory a podagenti), `rezim` (den nebo noc), `prehled` (stav týmu na začátku session), `zaznam-aktivity` (kdy který agent začal a skončil, pro Velín) |
 | `.claude/nastroje/` | `github-noc` (GitHub pro noční směnu: jen povolené akce přes REST) |
 | `skripty/velin.mjs` | Velín: místní stránka s přehledem, kdo z agentů pracuje a na čem, úkoly, PR a noční směna |
+| `skripty/board.mjs` | srovná board „Tým agentů“ na GitHub Projects podle štítků `stav:*` (board je jen pohled, stav se vede štítky) |
 | `.github/` | CI (testy a gitleaks), kontrola chráněných souborů, noční hlídač, šablony issue a PR, Dependabot |
 | `test/` | testy hooků a struktury týmů (kdo koho smí spouštět) |
 
@@ -33,7 +34,7 @@ Znovupoužitelný vývojový tým AI agentů pro Claude Code. Úkol vezme, rozpl
 1. Jednou na svém počítači vytvoř `.claude/settings.local.json` s obsahem `{"env": {"AGENT_TYM_DEN": "1"}}`. Bez něj běží hooky v přísném nočním režimu.
 2. Otevři Claude Code v kořeni repozitáře. Úvodní přehled má ukázat `REŽIM: den`.
 3. Zadej práci manažerovi, například „Postav X“.
-4. Stav sleduj ve Velínu: `npm run velin` a otevři http://127.0.0.1:4380. Otázky pro tebe mají štítek `pro-vlastnika`.
+4. Stav sleduj ve Velínu: `npm run velin` a otevři http://127.0.0.1:4380. Otázky pro tebe mají štítek `pro-vlastnika`. Board na GitHub Projects srovná `npm run board`. Projekt „Tým agentů“ s polem „Stav týmu“ se zakládá jednou, podle `node skripty/board.mjs --help`.
 5. Práce přes noc: `NOCNI-SMENA.md`, sekce 6.
 
 ## Etapy
