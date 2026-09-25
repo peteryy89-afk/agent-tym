@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Znovupoužitelný vývojový tým AI agentů pro Claude Code",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "velin": "node skripty/velin.mjs"
   },
   "engines": {
     "node": ">=20"
