@@ -5,10 +5,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { jeNoc } from './rezim.mjs';
 
 const SLOZKA = fileURLToPath(new URL('../agents/', import.meta.url));
-// Vestavění agenti Claude Code, kteří jen čtou. Manažer je smí přes den spouštět bez dotazu.
+// Vestavění agenti Claude Code, kteří neupravují soubory (Bash mají pod strážcem příkazů,
+// konektory pod strážcem noci). Manažer je smí přes den spouštět bez dotazu.
 const JEN_CTENI = new Set(['Explore', 'Plan', 'claude-code-guide']);
 
 // Týmy z `tools: Agent(...)` vedoucích, stejně jako test/agenti.test.mjs.
@@ -31,8 +31,7 @@ export function nactiTym(slozka = SLOZKA) {
 
 const zamitni = (duvod) => ({ rozhodnuti: 'deny', duvod });
 
-export function posud(volajici, cil, tym, prostredi = process.env) {
-  const noc = jeNoc(prostredi);
+export function posud(volajici, cil, tym, noc) {
   const vedouciClena = [...tym.vedouci].find(([, clenove]) => clenove.has(cil))?.[0];
   if (!volajici) {
     if (tym.vedouci.has(cil)) return null;
@@ -48,7 +47,18 @@ export function posud(volajici, cil, tym, prostredi = process.env) {
   return zamitni(`${volajici} nesmí spouštět další agenty (PROCES.md, sekce 1). Vrať výsledek tomu, kdo tě spustil.`);
 }
 
+// Režim se načítá až tady: kdyby rezim.mjs chyběl nebo byl rozbitý, statický import by shodil
+// hook a Claude Code by spuštění pustil. Bez režimu platí noc (zamítá se).
+async function zjistiNoc() {
+  try {
+    return (await import('./rezim.mjs')).jeNoc();
+  } catch {
+    return true;
+  }
+}
+
 async function main() {
+  const noc = await zjistiNoc();
   let vstup = '';
   for await (const kus of process.stdin) vstup += kus;
   let vysledek;
@@ -56,10 +66,10 @@ async function main() {
     const data = JSON.parse(vstup);
     if (!/^(Agent|Task)$/.test(data.tool_name ?? '')) return;
     const cil = data.tool_input?.subagent_type || 'general-purpose';
-    vysledek = posud(data.agent_type || null, cil, nactiTym());
+    vysledek = posud(data.agent_type || null, cil, nactiTym(), noc);
   } catch {
     // neplatný vstup i pád: Claude Code by akci pustil, proto rozhodujeme výslovně
-    vysledek = { rozhodnuti: jeNoc() ? 'deny' : 'ask', duvod: 'Strážce řetězu velení nedostal platný vstup. Spuštění agenta nešlo ověřit.' };
+    vysledek = { rozhodnuti: noc ? 'deny' : 'ask', duvod: 'Strážce řetězu velení nedostal platný vstup. Spuštění agenta nešlo ověřit.' };
   }
   if (!vysledek) return;
   process.stdout.write(JSON.stringify({
@@ -70,7 +80,7 @@ async function main() {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(() => {
     process.stdout.write(JSON.stringify({
-      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: jeNoc() ? 'deny' : 'ask', permissionDecisionReason: 'Strážce řetězu velení selhal.' },
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Strážce řetězu velení selhal.' },
     }));
   });
 }

@@ -8,7 +8,7 @@ Hlavní session Claude Code v tomto repozitáři je **manažer týmu**. Závazn�
 - Chce manažerský přehled a žádné halucinace.
 
 ## Jak manažer pracuje
-Manažer zadává práci **jen vedoucím týmů** (`*-vedouci`), nikdy přímo členům. Přehled týmů je v `PROCES.md`, sekce 1.
+Manažer zadává práci **jen vedoucím týmů** (`*-vedouci`), nikdy přímo členům. Vynucuje to hook `strazce-retezu`. Pro vyhledávání v kódu smí použít vestavěné `Explore` a `Plan`. Přehled týmů je v `PROCES.md`, sekce 1.
 
 1. Na začátku session dostaneš od hooku `prehled.mjs` stav úkolů. Otázky pro vlastníka shrň do nejvýše 5 bodů.
 2. **Který tým kdy:**
