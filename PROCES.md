@@ -129,8 +129,8 @@ stav:napad → stav:pripraveno → stav:rozpracovano → stav:revize → (stav:c
 ## 11. Noční směna
 
 Práce bez vlastníka (rutina Claude Code v cloudu) se řídí `NOCNI-SMENA.md`. Stručně:
-- bere jen úkoly, které **založil vlastník**, se štítky `noc:ano` a `stav:pripraveno`, bez `vetsi-akce`, nejvýše 3 za noc a jednu směnu za noc,
-- větve `claude/ukol-<číslo>-<popis>`, podagenti na modelu `sonnet`, nejvýše 20 za spuštění,
+- bere jen úkoly, které **založil vlastník**, se štítky `noc:ano` a `stav:pripraveno`, bez `vetsi-akce`, během pilotu nejvýše 1 za noc (strop zvedá vlastník podle spotřeby limitu) a jednu směnu za noc,
+- větve `claude/ukol-<číslo>-<popis>`, podagenti na modelu `sonnet`, během pilotu nejvýše 10 za spuštění,
 - **nikdy neslučuje** a nepoužívá konektory. Hooky v nočním režimu zamítají všechno, na co by se přes den ptaly vlastníka,
 - noční režim je výchozí, takže platí i bez proměnné `NOCNI_SMENA` (sekce 6),
 - na GitHub zapisuje jen přes `.claude/nastroje/github-noc.mjs`, protože cloud nepustí GraphQL a `gh issue`/`gh pr` tam nefungují. Nástroj pracuje jen s issues vlastníka a PR z nočních větví,
