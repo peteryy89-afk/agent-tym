@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { vytvorNastroj, repozitar, dnes, spust } from '../.claude/nastroje/github-noc.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { vytvorNastroj, repozitar, dnes, spust, nactiText } from '../.claude/nastroje/github-noc.mjs';
 
 const REPO = 'vlastnik/agent-tym';
 const DNES = dnes();
@@ -121,12 +124,49 @@ test('ranní zpráva: zavře starou, založí dnešní se štítky, podruhé odm
   assert.throws(() => vytvorNastroj(falesnyGitHub({ issues: [dnesni] }).gh, REPO).zprava('x'), /už existuje/);
 });
 
-test('repozitář z GH_REPO nebo z origin, datum v Praze', () => {
-  assert.equal(repozitar({ GH_REPO: 'a/b' }), 'a/b');
-  assert.equal(repozitar({ GH_REPO: 'a/b; rm' }, () => 'https://github.com/o/r.git\n'), 'o/r');
-  assert.equal(repozitar({}, () => 'git@github.com:o/r.git'), 'o/r');
-  assert.throws(() => repozitar({}, () => 'https://jinde.example/o/r'), /repozitář/);
+test('repozitář jen z origin, bez GH_REPO a bez .., datum v Praze', () => {
+  assert.equal(repozitar(() => 'https://github.com/o/r.git\n'), 'o/r');
+  assert.equal(repozitar(() => 'git@github.com:o/r.git'), 'o/r');
+  assert.throws(() => repozitar(() => 'https://jinde.example/o/r'), /Origin/);
+  assert.throws(() => repozitar(() => 'https://github.com/o/..'), /Origin/);
+  assert.throws(() => repozitar(() => 'https://github.com/../x'), /Origin/);
+  process.env.GH_REPO = 'utocnik/repo';
+  try {
+    assert.equal(repozitar(() => 'https://github.com/o/r'), 'o/r');
+  } finally {
+    delete process.env.GH_REPO;
+  }
   assert.equal(dnes(new Date('2026-09-25T23:00:00Z')), '2026-09-26');
+});
+
+test('texty jen z pracovní složky a bez tajných klíčů (nález 2 revize PR #6)', () => {
+  const slozka = fs.mkdtempSync(path.join(os.tmpdir(), 'noc-test-'));
+  const jinde = fs.mkdtempSync(path.join(os.tmpdir(), 'jinde-'));
+  try {
+    fs.writeFileSync(path.join(slozka, 'zprava.md'), 'Fronta byla prázdná.');
+    assert.equal(nactiText(path.join(slozka, 'zprava.md'), slozka), 'Fronta byla prázdná.');
+    fs.writeFileSync(path.join(jinde, 'tajne.txt'), 'x');
+    assert.throws(() => nactiText(path.join(jinde, 'tajne.txt'), slozka), /jen ze složky/);
+    assert.throws(() => nactiText(path.join(slozka, '..', path.basename(jinde), 'tajne.txt'), slozka), /jen ze složky/);
+    assert.throws(() => nactiText(path.join(slozka, 'neni.md'), slozka), /neexistuje/);
+    for (const klic of ['ghp_' + 'a'.repeat(36), 'github_pat_' + 'b'.repeat(30), 'sk-ant-' + 'c'.repeat(30), '-----BEGIN OPENSSH PRIVATE KEY-----']) {
+      fs.writeFileSync(path.join(slozka, 'k.md'), `text ${klic} text`);
+      assert.throws(() => nactiText(path.join(slozka, 'k.md'), slozka), /tajný klíč/, klic);
+    }
+  } finally {
+    fs.rmSync(slozka, { recursive: true, force: true });
+    fs.rmSync(jinde, { recursive: true, force: true });
+  }
+});
+
+test('kontroly čekají, dokud se neobjeví povinné testy a gitleaks', () => {
+  const ok = (name) => ({ name, status: 'completed', conclusion: 'success' });
+  const hodiny = { cas: 0 };
+  const moznosti = { spi: (s) => { hodiny.cas += s * 1000; }, ted: () => hodiny.cas };
+  const { gh } = falesnyGitHub({ behy: [[ok('testy')], [ok('testy'), ok('gitleaks')]] });
+  const vysledek = vytvorNastroj(gh, REPO, moznosti).kontroly(6);
+  assert.equal(vysledek.zelena, true);
+  assert.equal(hodiny.cas, 30000);
 });
 
 test('příkazová řádka: neznámý příkaz vrátí null (nápověda)', () => {

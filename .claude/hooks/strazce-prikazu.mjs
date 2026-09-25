@@ -4,7 +4,6 @@
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { jeNoc } from './rezim.mjs';
-import { repozitar } from '../nastroje/github-noc.mjs';
 
 const CHRANENE_CESTY = String.raw`(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude[\\/]|\.github[\\/])`;
 
@@ -76,6 +75,8 @@ const ZAKAZANE_V_NOCI = [
   [/\bgh(\.exe)?\s+pr\s+["']?merge\b/i, 'V noční směně se PR nikdy neslučují. Nech PR na vlastníkovi.'],
   [/\bgh\s+(release|workflow\s+run|repo\s+create)\b/, 'V noční směně se nic nevydává ani nespouští.'],
   [/\b(npm|pnpm|yarn)\s+publish\b/, 'V noční směně se nic nezveřejňuje.'],
+  [/\bgit\b[^|;&\n]*\bremote\s+(add|set-url|rename|remove|rm)\b|\bgit\b[^|;&\n]*\s-c\s|\bgit\b[^|;&\n]*\bconfig\b[^|;&\n]*(\bremote\.|insteadof)|\b(GH_(REPO|HOST|TOKEN|ENTERPRISE_TOKEN)|GIT_CONFIG\w*|GIT_DIR|GIT_WORK_TREE)=/i,
+    'V noční směně se nemění cílový repozitář ani přihlášení ke GitHubu.'],
   [/\bgh\s+label\s+(?!list\b)/, 'V noční směně se štítky nevytvářejí, neupravují ani nemažou.'],
   [/\bgh\s+issue\s+(delete|transfer|lock|unlock|pin|unpin)\b/, 'V noční směně se issues nemažou, nepřesouvají ani nezamykají.'],
   [/\bgh\s+issue\s+edit\b[^|;&\n]*\s(-b|--body|-F|--body-file|-t|--title)\b/, 'V noční směně se text issues nemění. Napiš komentář.'],
@@ -155,10 +156,12 @@ export function posud(prikaz, zjistiPR = infoPR, prostredi = process.env, zjisti
   return vysledek;
 }
 
+// Vlastník je první část adresy origin. Hook záměrně nic nenačítá z .claude/nastroje:
+// kdyby šel nástroj rozbít, spadl by i hook a Claude Code by pak pustil každý příkaz.
 function vlastnikRepozitare() {
   try {
-    // REST, ne gh repo view: cloud Claude Code GraphQL nepustí.
-    return execFileSync('gh', ['api', `repos/${repozitar()}`, '--jq', '.owner.login'], { encoding: 'utf8', timeout: 20000 }).trim() || null;
+    const origin = execFileSync('git', ['remote', 'get-url', 'origin'], { encoding: 'utf8', timeout: 20000 }).trim();
+    return origin.match(/github\.com[/:]([A-Za-z0-9-]+)\/[A-Za-z0-9._-]+?(\.git)?$/)?.[1] ?? null;
   } catch {
     return null;
   }

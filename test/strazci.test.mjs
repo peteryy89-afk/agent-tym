@@ -256,3 +256,19 @@ test('2. kolo revize PR #5: push jen do claude/, fork, filtr na skutečného vla
   // přes den se push do jiných větví nehlídá
   assert.equal(rozhodnuti('git push -u origin platforma/2-x'), 'povoleno');
 });
+
+test('revize PR #6: hook nenačítá nástroj a v noci nejde změnit cílový repozitář', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const zdroj = await readFile(new URL('../.claude/hooks/strazce-prikazu.mjs', import.meta.url), 'utf8');
+  // nález 1: rozbitý nástroj nesmí shodit hook
+  assert.doesNotMatch(zdroj, /^import.*nastroje/m);
+  // nález 3: přesměrování na jiný repozitář
+  const vNoci = (prikaz) => posudPrikaz(prikaz, pr(), {})?.rozhodnuti ?? 'povoleno';
+  for (const p of ['GH_REPO=jiny/repo node .claude/nastroje/github-noc.mjs stav', 'git remote set-url origin https://github.com/jiny/repo',
+    'git remote add druhy https://github.com/jiny/repo', 'git config remote.origin.url x', 'git config --global url.x.insteadOf y',
+    'GIT_CONFIG_COUNT=1 node .claude/nastroje/github-noc.mjs stav', 'git -c remote.origin.url=x push origin claude/ukol-4-x']) {
+    assert.equal(vNoci(p), 'deny', p);
+  }
+  assert.equal(vNoci('git remote get-url origin'), 'povoleno');
+  assert.equal(vNoci('node .claude/nastroje/github-noc.mjs stav'), 'povoleno');
+});

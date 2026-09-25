@@ -23,10 +23,10 @@ Cloud Claude Code nepustí GraphQL, takže `gh issue …` a `gh pr …` v cloudu
 | štítky | `$N stitky <č> --pridat stav:ceka-na-vlastnika --odebrat noc:ano` |
 | komentář | `$N komentar <č> <soubor>` |
 | PR | `$N pr claude/ukol-<č>-<popis> <soubor s popisem> <název>` |
-| počkat na CI | `$N kontroly <pr>` (nejvýše 20 minut, kód 0 = zelená) |
+| počkat na CI | `$N kontroly <pr>` (nejvýše 9 minut, Bash spusť s časovým limitem 600000 ms; kód 0 = zelená, při vypršení zkus ještě jednou) |
 | ranní zpráva | `$N zprava <soubor>` |
 
-Nástroj sám hlídá pravidla: čte jen issues a komentáře vlastníka, mění jen stavové štítky, PR zakládá jen z `claude/ukol-*`. **Delší texty piš nástrojem Write do souboru** (např. `/tmp/zprava.md`), ne do příkazu. Hook totiž prohledává text příkazu a mohl by se splést. Čtení přes `gh api` bez zápisu (například `gh api repos/<repo>/contents/…`) je povolené.
+Nástroj sám hlídá pravidla: čte jen issues a komentáře vlastníka, mění jen stavové štítky, PR zakládá jen z `claude/ukol-*`. **Texty (komentáře, popis PR, ranní zprávu) piš nástrojem Write do složky `/tmp/agent-tym-noc/`** (na začátku `mkdir -p /tmp/agent-tym-noc`), ne do příkazu. Jiné soubory nástroj neodešle a text s tajným klíčem odmítne. Hook navíc prohledává text příkazu a mohl by se splést. Čtení přes `gh api` bez zápisu (například `gh api repos/<repo>/contents/…`) je povolené.
 
 ## 1. Než začneš
 1. `node .claude/hooks/rezim.mjs` musí vypsat `noc`. Když vypíše `den`, **nepokračuj** a skonči bez ranní zprávy.
@@ -58,7 +58,7 @@ Jen ty z `fronta`. Každý navíc musí mít ověřitelná kritéria přijetí (
 - Když se něco zamítne (hook, nástroj, oprávnění), nezkoušej to obejít jinou cestou. Zapiš to do ranní zprávy.
 
 ## 5. Ranní zpráva (vždy na konci)
-Text napiš nástrojem Write do souboru a pak `$N zprava <soubor>`. Nástroj zavře předchozí zprávu a založí „Ranní zpráva <RRRR-MM-DD>“ se štítky `ranni-zprava` a `pro-vlastnika`.
+Text napiš nástrojem Write do `/tmp/agent-tym-noc/zprava.md` a pak `$N zprava /tmp/agent-tym-noc/zprava.md`. Nástroj zavře předchozí zprávu a založí „Ranní zpráva <RRRR-MM-DD>“ se štítky `ranni-zprava` a `pro-vlastnika`.
 
 ```
 ## Shrnutí
@@ -82,4 +82,4 @@ Když byla fronta prázdná, napiš krátkou zprávu „Fronta byla prázdná“
 ## 6. Jak vlastník zadá práci na noc
 - Úkol, který **založil vlastník**, se štítky `stav:pripraveno` a `noc:ano`. Manažer ho připraví přes den, vlastník potvrdí.
 - Vypnutí na jednu noc: otevřít issue se štítkem `noc:stop`. Úplné vypnutí: zastavit rutinu na claude.ai/code/routines.
-- Rutina má **právě jeden repozitář** (jinak se nenačtou hooky), model Sonnet a žádné konektory. Cloudové prostředí instaluje `gh` skriptem a má proměnnou `GH_REPO=<vlastník>/<repozitář>`.
+- Rutina má **právě jeden repozitář** (jinak se nenačtou hooky), model Sonnet a žádné konektory. Cloudové prostředí instaluje `gh` skriptem a **nemá žádné tajné proměnné**. Ke GitHubu se přihlašuje proxy cloudu.

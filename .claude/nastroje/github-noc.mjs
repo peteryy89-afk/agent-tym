@@ -3,24 +3,56 @@
 // Zápis přes gh api hook v noci zamítá. Noční směna proto zapisuje jen tímto nástrojem,
 // který umí jen povolené akce a pravidla hlídá sám: jen issues od vlastníka, jen stavové
 // štítky, PR jen z větví claude/ukol-*, komentáře jen od vlastníka.
-// Nástroj leží v chráněné složce .claude/, v noci ho agent nemůže měnit.
+// Nástroj leží v chráněné složce .claude/. Hook zamítá běžné způsoby zápisu do ní, skript
+// (node -e) ale nezachytí. Změnu pak ráno ukáže jen PR a kontrola chranene-soubory.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const SMI_PRIDAT = /^(stav:[\w-]+|blokovano|pro-vlastnika)$/;
 export const SMI_ODEBRAT = /^(stav:[\w-]+|noc:ano)$/;
 export const VETEV = /^claude\/ukol-\d+-[\w.-]+$/;
 export const MAX_UKOLU = 3;
+export const POVINNE_KONTROLY = ['testy', 'gitleaks'];
 const VYLUCUJICI = ['vetsi-akce', 'blokovano', 'pro-vlastnika'];
 const ZELENA = new Set(['success', 'skipped', 'neutral']);
 const MAX_TEXT = 20000;
 
-export function repozitar(prostredi = process.env, origin = () => execFileSync('git', ['remote', 'get-url', 'origin'], { encoding: 'utf8' })) {
-  if (/^[\w.-]+\/[\w.-]+$/.test(prostredi.GH_REPO ?? '')) return prostredi.GH_REPO;
-  const shoda = origin().trim().match(/github\.com[/:]([\w.-]+)\/([\w.-]+?)(\.git)?$/);
-  if (!shoda) throw new Error('Nepodařilo se zjistit repozitář (chybí GH_REPO a origin nemíří na GitHub).');
+// Kořen repozitáře, ve kterém nástroj leží (.claude/nastroje/ → dvě úrovně nahoru).
+const KOREN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+// Repozitář jen z origin repozitáře, ve kterém nástroj leží. GH_REPO záměrně ne:
+// proměnnou si agent nastaví před příkaz a poslal by nástroj do jiného repozitáře.
+export function repozitar(origin = () => execFileSync('git', ['-C', KOREN, 'remote', 'get-url', 'origin'], { encoding: 'utf8' })) {
+  const shoda = origin().trim().match(/github\.com[/:]([A-Za-z0-9-]+)\/([A-Za-z0-9_.-]+?)(\.git)?$/);
+  if (!shoda || shoda[2].includes('..')) throw new Error('Origin nemíří na repozitář na GitHubu.');
   return `${shoda[1]}/${shoda[2]}`;
+}
+
+// Texty pro GitHub jen z jedné pracovní složky, aby nástroj nešel použít ke zveřejnění
+// libovolného souboru (klíče, /proc/self/environ).
+export const SLOZKA_TEXTU = process.platform === 'win32' ? path.join(os.tmpdir(), 'agent-tym-noc') : '/tmp/agent-tym-noc';
+const TAJNE = [
+  /\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/, /\bgithub_pat_[A-Za-z0-9_]{20,}/, /\bsk-ant-[A-Za-z0-9_-]{20,}/,
+  /\bsk-[A-Za-z0-9]{32,}/, /\bAKIA[0-9A-Z]{16}\b/, /\bxox[abpr]-[A-Za-z0-9-]{10,}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+];
+
+export function nactiText(cesta, slozka = SLOZKA_TEXTU) {
+  const skutecnaCesta = (p, chyba) => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      throw new Error(chyba);
+    }
+  };
+  const koren = skutecnaCesta(slozka, `Texty pro GitHub čtu jen ze složky ${slozka}/, ta zatím neexistuje.`);
+  const skutecna = skutecnaCesta(cesta, `Soubor ${cesta} neexistuje. Texty piš do ${slozka}/.`);
+  if (!skutecna.startsWith(koren + path.sep)) throw new Error(`Texty pro GitHub čtu jen ze složky ${slozka}/.`);
+  const obsah = fs.readFileSync(skutecna, 'utf8');
+  if (TAJNE.some((vzor) => vzor.test(obsah))) throw new Error('Text vypadá, že obsahuje tajný klíč. Neodesláno.');
+  return obsah;
 }
 
 // Datum v Praze ve tvaru RRRR-MM-DD, podle něj se jmenuje ranní zpráva.
@@ -113,14 +145,15 @@ export function vytvorNastroj(gh, repo, { spi = () => {}, ted = () => Date.now()
       return { cislo: p.number, url: p.html_url };
     },
 
-    // Čeká nejvýše `limit` sekund, dokud všechny kontroly CI neskončí.
-    kontroly(pr, { limit = 1200, krok = 30 } = {}) {
+    // Čeká nejvýše `limit` sekund (pod limitem 10 minut nástroje Bash), dokud neskončí
+    // všechny kontroly CI a mezi nimi i povinné.
+    kontroly(pr, { limit = 540, krok = 30, povinne = POVINNE_KONTROLY } = {}) {
       const konec = ted() + limit * 1000;
       for (;;) {
         const sha = gh.jeden(`repos/${repo}/pulls/${cislo(pr)}`).head.sha;
         const behy = gh.jeden(`repos/${repo}/commits/${sha}/check-runs?per_page=100`).check_runs
           .map((b) => ({ nazev: b.name, stav: b.status, vysledek: b.conclusion }));
-        const hotovo = behy.length > 0 && behy.every((b) => b.stav === 'completed');
+        const hotovo = povinne.every((n) => behy.some((b) => b.nazev === n)) && behy.every((b) => b.stav === 'completed');
         if (hotovo) return { zelena: behy.every((b) => ZELENA.has(b.vysledek)), behy };
         if (ted() >= konec) return { zelena: false, casovyLimit: true, behy };
         spi(krok);
@@ -161,18 +194,18 @@ const NAPOVEDA = `Použití: node .claude/nastroje/github-noc.mjs <příkaz>
   stitky <č> [--pridat a,b] [--odebrat c]
   komentar <č> <soubor>             komentář z textového souboru
   pr <větev> <soubor> <název…>      PR z claude/ukol-* do main, popis ze souboru
-  kontroly <pr>                     počká na CI (nejvýše 20 min), kód 0 = zelená
+  kontroly <pr>                     počká na CI (nejvýše 9 min), kód 0 = zelená
   zprava <soubor>                   zavře starou a založí dnešní ranní zprávu
-Delší texty piš nástrojem Write do souboru, ne do příkazu.`;
+Texty piš nástrojem Write do složky ${SLOZKA_TEXTU}/, jiné soubory nástroj neodešle.
+Bash spouštěj s časovým limitem 600000 ms, jinak ho kontroly nestihnou.`;
 
 const seznamZ = (argumenty, prepinac) => {
   const i = argumenty.indexOf(prepinac);
   return i === -1 ? [] : (argumenty[i + 1] ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 };
 
-export function spust(argumenty, nastroj) {
+export function spust(argumenty, nastroj, soubor = nactiText) {
   const [prikaz, ...zbytek] = argumenty;
-  const soubor = (cesta) => fs.readFileSync(cesta, 'utf8');
   switch (prikaz) {
     case 'stav': return nastroj.stav();
     case 'issue': return nastroj.issue(zbytek[0]);
