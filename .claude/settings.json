@@ -85,6 +85,7 @@
       {
         "matcher": "Agent|Task",
         "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/strazce-retezu.mjs\"", "timeout": 30 },
           { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
         ]
       }

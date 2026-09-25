@@ -10,7 +10,7 @@ Znovupoužitelný vývojový tým AI agentů pro Claude Code. Úkol vezme, rozpl
 | `NOCNI-SMENA.md` | postup pro práci přes noc bez vlastníka (rutina Claude Code v cloudu) |
 | `.claude/agents/` | 9 týmů = 9 vedoucích (`*-vedouci`) a 27 členů, přehled v `PROCES.md`, sekce 1 |
 | `.claude/settings.json` | pravidla oprávnění a hooky |
-| `.claude/hooks/` | `strazce-prikazu` (nebezpečné příkazy), `strazce-zapisu` (tajné klíče a chráněné soubory), `strazce-noci` (konektory a podagenti), `rezim` (den nebo noc), `prehled` (stav týmu na začátku session), `zaznam-aktivity` (kdy který agent začal a skončil, pro Velín) |
+| `.claude/hooks/` | `strazce-prikazu` (nebezpečné příkazy), `strazce-zapisu` (tajné klíče a chráněné soubory), `strazce-noci` (konektory a podagenti), `strazce-retezu` (řetěz velení), `rezim` (den nebo noc), `prehled` (stav týmu na začátku session), `zaznam-aktivity` (kdy který agent začal a skončil, pro Velín) |
 | `.claude/nastroje/` | `github-noc` (GitHub pro noční směnu: jen povolené akce přes REST) |
 | `skripty/velin.mjs` | Velín: místní stránka s přehledem, kdo z agentů pracuje a na čem, úkoly, PR a noční směna |
 | `skripty/board.mjs` | srovná board „Tým agentů“ na GitHub Projects podle štítků `stav:*` (board je jen pohled, stav se vede štítky) |
