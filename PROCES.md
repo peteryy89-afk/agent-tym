@@ -21,7 +21,7 @@ MANAŽER (hlavní session) ── zadává práci jen vedoucím
 ```
 
 **Pravidla:**
-- Vedoucí smí spouštět **jen členy svého týmu**. Vynucuje to `tools: Agent(...)` v jeho definici a hlídá test `test/agenti.test.mjs`.
+- Vedoucí smí spouštět **jen členy svého týmu** podle `tools: Agent(...)` v jeho definici. Claude Code tento seznam u podagenta sám nevynucuje, proto to dělá hook `strazce-retezu`: manažer spouští jen vedoucí, vedoucí jen svůj tým a členové nikoho. Vestavěné agenty, které neupravují soubory (Explore, Plan, claude-code-guide), smí manažer přes den spustit bez dotazu, ostatní až po potvrzení, v noci žádné. Známá mezera: pokračování s už běžícím agentem přes `SendMessage` hook nehlídá. I to je porušení procesu.
 - Členové nikoho nespouštějí. Mezi týmy komunikuje jen manažer.
 - Vedoucí vrací manažerovi souhrn do 15 řádků. Detaily zůstávají v souborech, issues a PR.
 - Manažer nesmí sám implementovat úkoly na plné dráze a slučuje PR jen podle sekce 3.
