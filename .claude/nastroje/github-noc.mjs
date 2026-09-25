@@ -16,7 +16,7 @@ export const SMI_ODEBRAT = /^(stav:[\w-]+|noc:ano)$/;
 export const VETEV = /^claude\/ukol-\d+-[\w.-]+$/;
 export const MAX_UKOLU = 3;
 export const POVINNE_KONTROLY = ['testy', 'gitleaks'];
-const VYLUCUJICI = ['vetsi-akce', 'blokovano', 'pro-vlastnika'];
+export const VYLUCUJICI = ['vetsi-akce', 'blokovano', 'pro-vlastnika'];
 const ZELENA = new Set(['success', 'skipped', 'neutral']);
 const MAX_TEXT = 20000;
 

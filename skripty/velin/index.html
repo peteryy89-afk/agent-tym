@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Velín</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/velin.css">
+<script type="importmap" nonce="{{NONCE}}">{"imports":{"three":"/static/vendor/three/build/three.module.js","three/addons/":"/static/vendor/three/examples/jsm/"}}</script>
+<script type="module" nonce="{{NONCE}}" src="/static/app.js"></script>
+</head>
+<body>
+<canvas id="scena" aria-label="3D pohled na tým agentů"></canvas>
+
+<header class="hud">
+  <div class="znacka">
+    <span class="logo" aria-hidden="true"></span>
+    <div>
+      <h1>Velín</h1>
+      <p id="repo">načítám…</p>
+    </div>
+  </div>
+  <div class="cisla">
+    <div><b id="c-bezi">–</b><span>pracuje</span></div>
+    <div><b id="c-pr">–</b><span>otevřené PR</span></div>
+    <div><b id="c-noc">–</b><span>na noc</span></div>
+    <div><b id="c-vlastnik">–</b><span>čeká na tebe</span></div>
+  </div>
+  <nav class="tlacitka">
+    <span id="ovladani" class="stitek"></span>
+    <button id="b-tabule" type="button">Úkoly</button>
+    <button id="b-novy" type="button">+ Nový úkol</button>
+    <button id="b-noc" type="button">Noc</button>
+    <a href="/prehled" class="tlacitko">2D přehled</a>
+  </nav>
+</header>
+
+<section id="ceka" class="okno ceka" aria-label="Čeká na tebe">
+  <h2>Čeká na tebe</h2>
+  <ul id="ceka-seznam"></ul>
+</section>
+
+<aside id="panel" class="okno panel" hidden>
+  <button id="panel-zavrit" class="zavrit" type="button" aria-label="Zavřít">×</button>
+  <div id="panel-obsah"></div>
+</aside>
+
+<div id="legenda" class="legenda">
+  <span><i class="bod aktivni"></i>pracuje</span>
+  <span><i class="bod"></i>čeká</span>
+  <span><i class="krystal ok"></i>PR zelené</span>
+  <span><i class="krystal chyba"></i>PR červené</span>
+  <span><i class="krystal bezi"></i>PR běží</span>
+  <span class="napoveda">Táhni myší = otáčení · kolečko = přiblížení · klik = detail</span>
+</div>
+
+<div id="tooltip" class="tooltip" hidden></div>
+<div id="toasty" class="toasty" aria-live="polite"></div>
+<div id="stav-spojeni" class="spojeni" hidden></div>
+
+<dialog id="novy">
+  <form id="novy-form">
+    <h2>Nový úkol</h2>
+    <label>Název <input id="novy-nazev" maxlength="120" required autocomplete="off"></label>
+    <label>Popis <textarea id="novy-popis" maxlength="5000" rows="6"></textarea></label>
+    <p class="drobne">Založí issue se štítkem stav:napad. Na noc ho pošleš, až bude mít jasná kritéria.</p>
+    <div class="radek">
+      <button type="button" id="novy-zrusit">Zrušit</button>
+      <button type="submit" class="hlavni">Založit</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="bez-3d" class="bez-3d" hidden>
+  <p>Tento prohlížeč neumí WebGL, 3D pohled nejde zobrazit.</p>
+  <a href="/prehled" class="tlacitko">Otevřít 2D přehled</a>
+</div>
+</body>
+</html>
