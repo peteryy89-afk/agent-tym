@@ -131,4 +131,5 @@ Práce bez vlastníka (rutina Claude Code v cloudu) se řídí `NOCNI-SMENA.md`.
 - větve `claude/ukol-<číslo>-<popis>`, podagenti na modelu `sonnet`, nejvýše 20 za spuštění,
 - **nikdy neslučuje** a nepoužívá konektory. Hooky v nočním režimu zamítají všechno, na co by se přes den ptaly vlastníka,
 - noční režim je výchozí, takže platí i bez proměnné `NOCNI_SMENA` (sekce 6),
+- na GitHub zapisuje jen přes `.claude/nastroje/github-noc.mjs`, protože cloud nepustí GraphQL a `gh issue`/`gh pr` tam nefungují,
 - ráno nechá issue „Ranní zpráva“ se štítky `ranni-zprava` a `pro-vlastnika`.
