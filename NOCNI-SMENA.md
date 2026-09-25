@@ -82,5 +82,5 @@ Když byla fronta prázdná, napiš krátkou zprávu „Fronta byla prázdná“
 ## 6. Jak vlastník zadá práci na noc
 - Úkol, který **založil vlastník**, se štítky `stav:pripraveno` a `noc:ano`. Manažer ho připraví přes den, vlastník potvrdí.
 - Vypnutí na jednu noc: otevřít issue se štítkem `noc:stop`. Úplné vypnutí: zastavit rutinu na claude.ai/code/routines.
-- Workflow `nocni-hlidac` založí upozornění, když se v noci stane něco, co noční směna nikdy nedělá (sloučení, `noc:ano`, schválení, odebrání `vetsi-akce`). Když to byl vlastník, upozornění zavře.
+- Workflow `nocni-hlidac` založí upozornění, když se v noci stane něco, co noční směna nikdy nedělá (sloučení, `noc:ano`, schválení, odebrání `vetsi-akce`, vypnutí `noc:stop`, zavření upozornění). Když to byl vlastník, zavře upozornění až po 7:00.
 - Rutina má **právě jeden repozitář** (jinak se nenačtou hooky), model Sonnet a žádné konektory. Cloudové prostředí instaluje `gh` skriptem a **nemá žádné tajné proměnné**. Ke GitHubu se přihlašuje proxy cloudu.

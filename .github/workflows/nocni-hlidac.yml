@@ -1,12 +1,13 @@
 # Upozorní vlastníka na akce, které noční směna nikdy dělat nesmí (NOCNI-SMENA.md):
-# sloučení PR, přidání noc:ano nebo schvaleno-vlastnikem, odebrání vetsi-akce.
+# sloučení PR, přidání noc:ano nebo schvaleno-vlastnikem, odebrání vetsi-akce, vypnutí noc:stop
+# a zavření upozornění (agent jedná jako vlastník, mohl by stopy zamést).
 # Hlídá okno 22:00–7:00 pražského času. Běží z main, takže ho noční agent nezmění.
 # Agent jedná pod účtem vlastníka, proto se rozlišuje jen podle času: když to byl vlastník, upozornění zavře.
 # Nečte ani nespouští kód z PR a do skriptu nevkládá text od uživatelů (jen čísla a názvy štítků přes env).
 name: Noční hlídač
 on:
   issues:
-    types: [labeled, unlabeled]
+    types: [labeled, unlabeled, closed]
   pull_request_target:
     types: [labeled, unlabeled, closed]
 permissions:
@@ -24,6 +25,9 @@ jobs:
           STITEK: ${{ github.event.label.name }}
           CISLO: ${{ github.event.issue.number || github.event.pull_request.number }}
           SLOUCENO: ${{ github.event.pull_request.merged }}
+          UDALOST: ${{ github.event_name }}
+          STITKY: ${{ join(github.event.issue.labels.*.name, ',') }}
+          NAZEV: ${{ github.event.issue.title }}
         run: |
           hodina=$((10#$(TZ=Europe/Prague date +%H)))
           if [ "$hodina" -ge 7 ] && [ "$hodina" -lt 22 ]; then
@@ -35,9 +39,14 @@ jobs:
             labeled:noc:ano) popis="přidán štítek noc:ano" ;;
             labeled:schvaleno-vlastnikem) popis="přidán štítek schvaleno-vlastnikem" ;;
             unlabeled:vetsi-akce) popis="odebrán štítek vetsi-akce" ;;
+            unlabeled:noc:stop) popis="odebrán štítek noc:stop" ;;
           esac
-          if [ "$AKCE" = "closed" ] && [ "$SLOUCENO" = "true" ]; then
+          if [ "$AKCE" = "closed" ] && [ "$UDALOST" = "pull_request_target" ] && [ "$SLOUCENO" = "true" ]; then
             popis="sloučen PR"
+          fi
+          if [ "$AKCE" = "closed" ] && [ "$UDALOST" = "issues" ]; then
+            case ",$STITKY," in *,noc:stop,*) popis="zavřeno issue se štítkem noc:stop" ;; esac
+            case "$NAZEV" in "Upozornění: v noci"*) popis="zavřeno upozornění nočního hlídače" ;; esac
           fi
           if [ -z "$popis" ]; then
             echo "Nic podezřelého."
@@ -46,7 +55,7 @@ jobs:
           cas=$(TZ=Europe/Prague date '+%Y-%m-%d %H:%M')
           telo="V noci ($cas) byl u #$CISLO $popis. Noční směna tohle nikdy nedělá (NOCNI-SMENA.md).
 
-          - Pokud jsi to byl ty, toto upozornění zavři.
+          - Pokud jsi to byl ty, toto upozornění zavři až po 7:00 (zavření v noci hlídač hlásí taky).
           - Pokud ne, zastav rutinu na claude.ai/code/routines, otevři issue se štítkem noc:stop a zkontroluj #$CISLO."
           gh api "repos/$REPO/issues" --method POST \
             -f title="Upozornění: v noci $popis (#$CISLO)" \
