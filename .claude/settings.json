@@ -8,12 +8,19 @@
       "Read(*.pem)",
       "Read(*.key)",
       "Bash(gh secret *)",
+      "PowerShell(gh secret *)",
       "Bash(gh gist *)",
+      "PowerShell(gh gist *)",
       "Bash(gh auth *)",
+      "PowerShell(gh auth *)",
       "Bash(gh repo edit *)",
+      "PowerShell(gh repo edit *)",
       "Bash(gh repo delete *)",
+      "PowerShell(gh repo delete *)",
       "Bash(git push --force *)",
-      "Bash(git push -f *)"
+      "PowerShell(git push --force *)",
+      "Bash(git push -f *)",
+      "PowerShell(git push -f *)"
     ],
     "ask": [
       "Edit(PROCES.md)",
@@ -24,22 +31,39 @@
     ],
     "allow": [
       "Bash(gh issue *)",
+      "PowerShell(gh issue *)",
       "Bash(gh pr view *)",
+      "PowerShell(gh pr view *)",
       "Bash(gh pr diff *)",
+      "PowerShell(gh pr diff *)",
       "Bash(gh pr checks *)",
+      "PowerShell(gh pr checks *)",
       "Bash(gh pr list *)",
+      "PowerShell(gh pr list *)",
       "Bash(gh pr comment *)",
+      "PowerShell(gh pr comment *)",
       "Bash(gh pr create *)",
+      "PowerShell(gh pr create *)",
       "Bash(gh label list *)",
+      "PowerShell(gh label list *)",
       "Bash(git status *)",
+      "PowerShell(git status *)",
       "Bash(git diff *)",
+      "PowerShell(git diff *)",
       "Bash(git log *)",
+      "PowerShell(git log *)",
       "Bash(git switch *)",
+      "PowerShell(git switch *)",
       "Bash(git fetch *)",
+      "PowerShell(git fetch *)",
       "Bash(git add *)",
+      "PowerShell(git add *)",
       "Bash(git commit *)",
+      "PowerShell(git commit *)",
       "Bash(npm test *)",
-      "Bash(node --test *)"
+      "PowerShell(npm test *)",
+      "Bash(node --test *)",
+      "PowerShell(node --test *)"
     ]
   },
   "hooks": {
@@ -47,59 +71,59 @@
       {
         "matcher": "startup|resume",
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/prehled.mjs\"", "timeout": 60 }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/prehled.mjs\"", "timeout": 60 }
         ]
       },
       {
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/strazce-prikazu.mjs\"", "timeout": 30 }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/strazce-prikazu.mjs\"", "timeout": 30 }
         ]
       },
       {
         "matcher": "Write|Edit|NotebookEdit",
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/strazce-zapisu.mjs\"", "timeout": 30 }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/strazce-zapisu.mjs\"", "timeout": 30 }
         ]
       },
       {
         "matcher": "mcp__.*|Agent|Task",
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/strazce-noci.mjs\"", "timeout": 30 }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/strazce-noci.mjs\"", "timeout": 30 }
         ]
       },
       {
         "matcher": "Agent|Task",
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
         ]
       }
     ],
     "SubagentStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
         ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
         ]
       }
     ],
     "SessionEnd": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
+          { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/zaznam-aktivity.mjs\"", "timeout": 10 }
         ]
       }
     ]
