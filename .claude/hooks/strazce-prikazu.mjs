@@ -4,6 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { jeNoc } from './rezim.mjs';
+import { repozitar } from '../nastroje/github-noc.mjs';
 
 const CHRANENE_CESTY = String.raw`(PROCES\.md|CLAUDE\.md|NOCNI-SMENA\.md|\.gitleaks\.toml|\.claude[\\/]|\.github[\\/])`;
 
@@ -78,6 +79,7 @@ const ZAKAZANE_V_NOCI = [
   [/\bgh\s+label\s+(?!list\b)/, 'V noční směně se štítky nevytvářejí, neupravují ani nemažou.'],
   [/\bgh\s+issue\s+(delete|transfer|lock|unlock|pin|unpin)\b/, 'V noční směně se issues nemažou, nepřesouvají ani nezamykají.'],
   [/\bgh\s+issue\s+edit\b[^|;&\n]*\s(-b|--body|-F|--body-file|-t|--title)\b/, 'V noční směně se text issues nemění. Napiš komentář.'],
+  [/\bgh\s+(issue|pr)\s+(create|edit|comment|close|reopen|review|ready)\b/, 'V noční směně zapisuj na GitHub jen přes node .claude/nastroje/github-noc.mjs (v cloudu gh issue/pr nefungují).'],
 ];
 
 // Agent jedná pod účtem vlastníka, GitHub ho proto od vlastníka neodliší.
@@ -155,7 +157,8 @@ export function posud(prikaz, zjistiPR = infoPR, prostredi = process.env, zjisti
 
 function vlastnikRepozitare() {
   try {
-    return execFileSync('gh', ['repo', 'view', '--json', 'owner', '--jq', '.owner.login'], { encoding: 'utf8', timeout: 20000 }).trim() || null;
+    // REST, ne gh repo view: cloud Claude Code GraphQL nepustí.
+    return execFileSync('gh', ['api', `repos/${repozitar()}`, '--jq', '.owner.login'], { encoding: 'utf8', timeout: 20000 }).trim() || null;
   } catch {
     return null;
   }

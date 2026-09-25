@@ -160,7 +160,8 @@ test('noční směna: nic se neslučuje, nezveřejňuje a místo dotazu se zamí
   assert.equal(vNoci('gh pr edit 3 --add-label schvaleno-vlastnikem'), 'deny');
   assert.match(posudPrikaz('npm install x', pr(), noc).duvod, /pro-vlastnika/);
   assert.equal(vNoci('git push -u origin claude/ukol-4-sync'), 'povoleno');
-  assert.equal(vNoci('gh pr create --title x --body y'), 'povoleno');
+  assert.equal(vNoci('gh pr create --title x --body y'), 'deny');
+  assert.equal(vNoci('node .claude/nastroje/github-noc.mjs pr claude/ukol-4-sync popis.md Přidej sync'), 'povoleno');
   assert.equal(vNoci('gh issue list --label noc:ano'), 'povoleno');
   // přes den se nic nemění
   assert.equal(posudPrikaz('gh pr merge 1', pr(), DEN)?.rozhodnuti ?? 'povoleno', 'povoleno');
@@ -194,10 +195,13 @@ test('noční směna: štítky jen stavové, frontu si agent sám nerozšíří'
     'gh issue delete 3 --yes', 'gh issue edit 4 --body "nový text"', 'gh issue edit 4 -t jiny']) {
     assert.equal(vNoci(p), 'deny', p);
   }
+  // v noci jde každý zápis přes gh issue/pr do nástroje github-noc (v cloudu gh issue/pr nefungují)
   for (const p of ['gh issue edit 4 --add-label stav:ceka-na-vlastnika --remove-label noc:ano',
-    'gh issue edit 4 --add-label blokovano --remove-label noc:ano,stav:rozpracovano',
     'gh issue create --title "Ranní zpráva 2026-09-25" --body-file zprava.md --label ranni-zprava --label pro-vlastnika',
-    'gh issue close 9', 'gh label list']) {
+    'gh issue close 9', 'gh pr comment 6 --body x']) {
+    assert.match(posudPrikaz(p, pr(), {})?.duvod ?? '', /github-noc/, p);
+  }
+  for (const p of ['gh label list', 'node .claude/nastroje/github-noc.mjs stitky 4 --pridat stav:ceka-na-vlastnika --odebrat noc:ano']) {
     assert.equal(vNoci(p), 'povoleno', p);
   }
   // přes den se štítky nehlídají (kromě schválení)
@@ -238,7 +242,7 @@ test('2. kolo revize PR #5: push jen do claude/, fork, filtr na skutečného vla
   assert.equal(vNoci('git push origin claude/ukol-4-sync:refs/heads/claude/ukol-4-sync'), 'povoleno');
   assert.equal(vNoci('git push origin main'), 'deny');
   // nález 1: kontrolní příkaz ze začátku směny hook zamítne
-  assert.match(posudPrikaz('gh issue edit 0 --add-label noc:ano', pr(), {}).duvod, /V noční směně nesmíš přidat štítek/);
+  assert.match(posudPrikaz('gh issue edit 0 --add-label noc:ano', pr(), {}).duvod, /^V noční směně/);
   // nález 4: fork dědí model hlavní session
   assert.equal(posudNoc('Agent', { subagent_type: 'fork', model: 'sonnet' }, {})?.rozhodnuti, 'deny');
   // nález 5: login musí být vlastník, timeline je taky čtení komentářů
