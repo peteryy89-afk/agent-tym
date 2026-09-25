@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { repozitar, vyberFrontu } from '../.claude/nastroje/github-noc.mjs';
+import { repozitar, vyberFrontu, MAX_UKOLU } from '../.claude/nastroje/github-noc.mjs';
 import { SOUBOR as SOUBOR_ZAZNAMU } from '../.claude/hooks/zaznam-aktivity.mjs';
 
 export const KOREN = fileURLToPath(new URL('../', import.meta.url));
@@ -323,7 +323,7 @@ export function vykresli(stav) {
       : '<p class="mala">Žádný otevřený PR.</p>';
     const noc = `<section><h2>Noční směna</h2>
       ${gh.noc.stop.length ? `<p class="varovani">Zastaveno štítkem noc:stop: ${gh.noc.stop.map((i) => odkaz(stav, i.cislo, `#${i.cislo}`)).join(', ')}</p>` : ''}
-      <h3>Fronta na příští noc (nejvýše 3)</h3>${seznam(gh.noc.fronta)}
+      <h3>Fronta na příští noc (nejvýše ${MAX_UKOLU})</h3>${seznam(gh.noc.fronta)}
       <h3>Poslední ranní zprávy</h3>${gh.noc.zpravy.length ? `<ul>${gh.noc.zpravy.map((z) => `<li>${odkaz(stav, z.cislo, `#${z.cislo} ${z.nazev}`)} <span class="mala">${e(z.stav === 'open' ? 'otevřená' : 'zavřená')}</span></li>`).join('')}</ul>` : '<p class="mala">Zatím žádná.</p>'}
       <p class="mala">Běhy rutiny: <a href="https://claude.ai/code/routines">claude.ai/code/routines</a></p></section>`;
     githubHtml = `${proVlastnika}<section><h2>Úkoly</h2><div class="mrizka">${sloupce}</div></section>

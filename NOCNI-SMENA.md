@@ -7,7 +7,7 @@ V noci jsi **manažer** podle `CLAUDE.md` a platí `PROCES.md`. **Při rozporu m
 ## Proč je noc přísnější než den
 Rutina jedná pod GitHub účtem vlastníka a běží bez dotazů na oprávnění. GitHub ji od vlastníka neodliší. Pojistky proto drží hooky (`.claude/hooks/`), které se v noci zapínají samy:
 - **Noční režim je výchozí.** Denní režim zapíná jen `AGENT_TYM_DEN=1` z lokálního `.claude/settings.local.json`, který v repozitáři není. V cloudu je tedy noc vždy, i bez proměnné `NOCNI_SMENA`.
-- V noci hook zamítá: sloučení, vydání, konektory (`mcp__*`), zápis do chráněných souborů, nové závislosti, zápis na GitHub mimo nástroj `github-noc`, podagenty na drahém modelu a víc než 20 podagentů za spuštění. Všechno, na co by se přes den ptal vlastníka, v noci rovnou zamítne.
+- V noci hook zamítá: sloučení, vydání, konektory (`mcp__*`), zápis do chráněných souborů, nové závislosti, zápis na GitHub mimo nástroj `github-noc`, podagenty na drahém modelu a víc než 10 podagentů za spuštění. Všechno, na co by se přes den ptal vlastníka, v noci rovnou zamítne.
 
 ## GitHub v noci: jen přes nástroj `github-noc`
 Cloud Claude Code nepustí GraphQL, takže `gh issue …` a `gh pr …` v cloudu nefungují. Na GitHub proto zapisuješ **jen** takto (nápověda: `node .claude/nastroje/github-noc.mjs --help`):
@@ -34,7 +34,7 @@ Nástroj sám hlídá pravidla: pracuje jen s issues vlastníka a PR z větví `
 3. `$N stav`:
    - `nocStop: true` → nic nedělej a skonči, ranní zprávu nepiš,
    - `dnesniZprava: true` → skonči (jedna směna za noc, opakované spuštění nespotřebuje limit podruhé),
-   - `fronta` jsou úkoly na dnešní noc (nejvýše 3, jen od vlastníka, bez `vetsi-akce`, `blokovano` a `pro-vlastnika`).
+   - `fronta` jsou úkoly na dnešní noc (během pilotu nejvýše 1, jen od vlastníka, bez `vetsi-akce`, `blokovano` a `pro-vlastnika`).
 
 ## 2. Které úkoly smíš vzít
 Jen ty z `fronta`. Každý navíc musí mít ověřitelná kritéria přijetí (`PROCES.md`, sekce 3). Když je nemá, dej mu štítek `pro-vlastnika`, napiš komentář proč a pokračuj dalším.

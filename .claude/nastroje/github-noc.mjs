@@ -14,7 +14,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const SMI_PRIDAT = /^(stav:[\w-]+|blokovano|pro-vlastnika)$/;
 export const SMI_ODEBRAT = /^(stav:[\w-]+|noc:ano)$/;
 export const VETEV = /^claude\/ukol-\d+-[\w.-]+$/;
-export const MAX_UKOLU = 3;
+// Pilot: 1 úkol za noc, dokud vlastník podle spotřeby limitu nepovolí víc (NOCNI-SMENA.md, sekce 6).
+export const MAX_UKOLU = 1;
 export const POVINNE_KONTROLY = ['testy', 'gitleaks'];
 const VYLUCUJICI = ['vetsi-akce', 'blokovano', 'pro-vlastnika'];
 const ZELENA = new Set(['success', 'skipped', 'neutral']);
