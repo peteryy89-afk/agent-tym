@@ -26,7 +26,7 @@ Cloud Claude Code nepustí GraphQL, takže `gh issue …` a `gh pr …` v cloudu
 | počkat na CI | `$N kontroly <pr>` (nejvýše 9 minut, Bash spusť s časovým limitem 600000 ms; kód 0 = zelená, při vypršení zkus ještě jednou) |
 | ranní zpráva | `$N zprava <soubor>` |
 
-Nástroj sám hlídá pravidla: čte jen issues a komentáře vlastníka, mění jen stavové štítky, PR zakládá jen z `claude/ukol-*`. **Texty (komentáře, popis PR, ranní zprávu) piš nástrojem Write do složky `/tmp/agent-tym-noc/`** (na začátku `mkdir -p /tmp/agent-tym-noc`), ne do příkazu. Jiné soubory nástroj neodešle a text s tajným klíčem odmítne. Hook navíc prohledává text příkazu a mohl by se splést. Čtení přes `gh api` bez zápisu (například `gh api repos/<repo>/contents/…`) je povolené.
+Nástroj sám hlídá pravidla: pracuje jen s issues vlastníka a PR z větví `claude/ukol-*` tohoto repozitáře, čte jen komentáře vlastníka, mění jen existující stavové štítky a PR zakládá jen z `claude/ukol-*`. **Texty (komentáře, popis PR, ranní zprávu) piš nástrojem Write do složky `/tmp/agent-tym-noc/`** (na začátku `mkdir -p /tmp/agent-tym-noc`), ne do příkazu. Jiné soubory nástroj neodešle a text s tajným klíčem odmítne. Hook navíc prohledává text příkazu a mohl by se splést. Čtení přes `gh api` bez zápisu (například `gh api repos/<repo>/contents/…`) je povolené.
 
 ## 1. Než začneš
 1. `node .claude/hooks/rezim.mjs` musí vypsat `noc`. Když vypíše `den`, **nepokračuj** a skonči bez ranní zprávy.
@@ -82,4 +82,5 @@ Když byla fronta prázdná, napiš krátkou zprávu „Fronta byla prázdná“
 ## 6. Jak vlastník zadá práci na noc
 - Úkol, který **založil vlastník**, se štítky `stav:pripraveno` a `noc:ano`. Manažer ho připraví přes den, vlastník potvrdí.
 - Vypnutí na jednu noc: otevřít issue se štítkem `noc:stop`. Úplné vypnutí: zastavit rutinu na claude.ai/code/routines.
+- Workflow `nocni-hlidac` založí upozornění, když se v noci stane něco, co noční směna nikdy nedělá (sloučení, `noc:ano`, schválení, odebrání `vetsi-akce`, vypnutí `noc:stop`, zavření upozornění). Když to byl vlastník, zavře upozornění až po 7:00.
 - Rutina má **právě jeden repozitář** (jinak se nenačtou hooky), model Sonnet a žádné konektory. Cloudové prostředí instaluje `gh` skriptem a **nemá žádné tajné proměnné**. Ke GitHubu se přihlašuje proxy cloudu.

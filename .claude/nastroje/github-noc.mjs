@@ -83,6 +83,22 @@ export function vytvorNastroj(gh, repo, { spi = () => {}, ted = () => Date.now()
     return issue;
   }
 
+  // V noci pracuje jen na vlastních věcech: issues vlastníka a PR z nočních větví tohoto repozitáře.
+  function overCil(n, { jenPR = false } = {}) {
+    const c = cislo(n);
+    const issue = gh.jeden(`repos/${repo}/issues/${c}`);
+    if (issue.pull_request) {
+      const hlava = gh.jeden(`repos/${repo}/pulls/${c}`).head;
+      if (!VETEV.test(hlava.ref) || hlava.repo?.full_name !== repo)
+        throw new Error(`PR #${c} není z noční větve claude/ukol-* tohoto repozitáře. V noci na něj nesahej.`);
+    } else if (jenPR) {
+      throw new Error(`#${c} není PR.`);
+    } else if (!stejny(issue.user.login, vlastnik())) {
+      throw new Error(`#${c} nezaložil vlastník repozitáře. V noci ho nečti ani needituj.`);
+    }
+    return c;
+  }
+
   return {
     stav() {
       const otevrene = gh.seznam(`repos/${repo}/issues?state=open&per_page=100`).filter((i) => !i.pull_request);
@@ -109,20 +125,25 @@ export function vytvorNastroj(gh, repo, { spi = () => {}, ted = () => Date.now()
     },
 
     komentare(n) {
-      return gh.seznam(`repos/${repo}/issues/${cislo(n)}/comments?per_page=100`)
+      return gh.seznam(`repos/${repo}/issues/${overCil(n)}/comments?per_page=100`)
         .filter((k) => stejny(k.user.login, vlastnik()))
         .map((k) => ({ kdy: k.created_at, text: k.body }));
     },
 
     diff(pr) {
-      return gh.surovy(`repos/${repo}/pulls/${cislo(pr)}`, 'application/vnd.github.diff');
+      return gh.surovy(`repos/${repo}/pulls/${overCil(pr, { jenPR: true })}`, 'application/vnd.github.diff');
     },
 
     stitky(n, pridat = [], odebrat = []) {
       for (const s of pridat) if (!SMI_PRIDAT.test(s)) throw new Error(`V noci nesmíš přidat štítek ${s}.`);
       for (const s of odebrat) if (!SMI_ODEBRAT.test(s)) throw new Error(`V noci nesmíš odebrat štítek ${s}.`);
       if (!pridat.length && !odebrat.length) throw new Error('Zadej --pridat nebo --odebrat.');
-      const c = cislo(n);
+      // Přidáním neexistujícího štítku by ho GitHub založil. V noci jen existující.
+      if (pridat.length) {
+        const existujici = new Set(gh.seznam(`repos/${repo}/labels?per_page=100`).map((s) => s.name));
+        for (const s of pridat) if (!existujici.has(s)) throw new Error(`Štítek ${s} v repozitáři neexistuje. V noci nové štítky nezakládej.`);
+      }
+      const c = overCil(n);
       if (pridat.length) gh.jeden(`repos/${repo}/issues/${c}/labels`, 'POST', { labels: pridat });
       for (const s of odebrat) {
         try {
@@ -135,7 +156,7 @@ export function vytvorNastroj(gh, repo, { spi = () => {}, ted = () => Date.now()
     },
 
     komentar(n, obsah) {
-      const k = gh.jeden(`repos/${repo}/issues/${cislo(n)}/comments`, 'POST', { body: text(obsah) });
+      const k = gh.jeden(`repos/${repo}/issues/${overCil(n)}/comments`, 'POST', { body: text(obsah) });
       return { url: k.html_url };
     },
 

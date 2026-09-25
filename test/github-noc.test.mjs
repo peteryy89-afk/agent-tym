@@ -9,23 +9,35 @@ const REPO = 'vlastnik/agent-tym';
 const DNES = dnes();
 
 // Podvržený GitHub: vrací připravená data a zapisuje volání, nic neposílá.
-function falesnyGitHub({ issues = [], komentare = [], behy = [[]] } = {}) {
+const STITKY_REPA = ['stav:napad', 'stav:pripraveno', 'stav:rozpracovano', 'stav:revize', 'stav:ceka-na-vlastnika',
+  'blokovano', 'pro-vlastnika', 'noc:ano', 'vetsi-akce', 'ranni-zprava'];
+
+// prs: { číslo: { ref, repo } } – PR a jejich větve. Neznámé issue patří vlastníkovi.
+function falesnyGitHub({ issues = [], komentare = [], behy = [[]], prs = {} } = {}) {
   const volani = [];
   let kolo = 0;
   const gh = {
     seznam(cesta) {
       volani.push(['GET', cesta]);
       if (cesta.includes('/comments')) return komentare;
+      if (/\/labels\?/.test(cesta)) return STITKY_REPA.map((name) => ({ name }));
       if (cesta.includes('labels=ranni-zprava')) return issues.filter((i) => i.labels.includes('ranni-zprava'));
       return issues.filter((i) => i.state !== 'closed');
     },
     jeden(cesta, metoda = 'GET', data) {
       volani.push([metoda, cesta, data]);
       if (cesta === `repos/${REPO}`) return { owner: { login: 'Vlastnik' } };
-      if (/\/pulls\/\d+$/.test(cesta)) return { head: { sha: 'abc' } };
+      const pr = cesta.match(/\/pulls\/(\d+)$/)?.[1];
+      if (pr) {
+        const { ref = 'claude/ukol-4-sync', repo = REPO } = prs[pr] ?? {};
+        return { head: { sha: 'abc', ref, repo: { full_name: repo } } };
+      }
       if (cesta.includes('/check-runs')) return { check_runs: behy[Math.min(kolo++, behy.length - 1)] };
       const cislo = cesta.match(/\/issues\/(\d+)$/)?.[1];
-      if (cislo && metoda === 'GET') return issues.find((i) => i.number === Number(cislo));
+      if (cislo && metoda === 'GET') {
+        if (prs[cislo]) return issue(Number(cislo), 'vlastnik', [], { pull_request: {} });
+        return issues.find((i) => i.number === Number(cislo)) ?? issue(Number(cislo), 'vlastnik', []);
+      }
       return { number: 99, html_url: 'https://example.invalid/99' };
     },
     surovy: () => 'diff',
@@ -172,4 +184,32 @@ test('kontroly čekají, dokud se neobjeví povinné testy a gitleaks', () => {
 test('příkazová řádka: neznámý příkaz vrátí null (nápověda)', () => {
   assert.equal(spust(['smaz', '4'], {}), null);
   assert.equal(spust([], {}), null);
+});
+
+test('issue #7: jen vlastní issues a PR z nočních větví tohoto repozitáře', () => {
+  const { gh, zapisy } = falesnyGitHub({
+    issues: [issue(5, 'cizi', [])],
+    prs: { 6: { ref: 'claude/ukol-4-sync' }, 7: { ref: 'platforma/2-x' }, 8: { ref: 'claude/ukol-4-sync', repo: 'cizi/fork' } },
+  });
+  const n = vytvorNastroj(gh, REPO);
+  // PR z noční větve: diff, komentář i štítky jdou
+  assert.equal(n.diff(6), 'diff');
+  n.komentar(6, 'Revize: SCHVÁLENO');
+  n.stitky(6, ['stav:revize']);
+  // cizí issue, PR z jiné větve, PR z forku: nic
+  for (const akce of [() => n.komentar(5, 'x'), () => n.stitky(5, ['pro-vlastnika']), () => n.komentare(5)])
+    assert.throws(akce, /nezaložil vlastník/);
+  for (const akce of [() => n.diff(7), () => n.komentar(7, 'x'), () => n.diff(8), () => n.stitky(8, ['stav:revize'])])
+    assert.throws(akce, /není z noční větve/);
+  assert.throws(() => n.diff(4), /není PR/);
+  assert.deepEqual(zapisy().map(([m, c]) => `${m} ${c}`), [`POST repos/${REPO}/issues/6/comments`, `POST repos/${REPO}/issues/6/labels`]);
+});
+
+test('issue #7: nový štítek stav:* se v noci nezaloží', () => {
+  const { gh, zapisy } = falesnyGitHub();
+  const n = vytvorNastroj(gh, REPO);
+  assert.throws(() => n.stitky(4, ['stav:libovolny']), /neexistuje/);
+  assert.equal(zapisy().length, 0);
+  n.stitky(4, ['stav:rozpracovano'], ['stav:pripraveno']);
+  assert.equal(zapisy().length, 2);
 });

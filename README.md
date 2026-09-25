@@ -12,7 +12,7 @@ Znovupoužitelný vývojový tým AI agentů pro Claude Code. Úkol vezme, rozpl
 | `.claude/settings.json` | pravidla oprávnění a hooky |
 | `.claude/hooks/` | `strazce-prikazu` (nebezpečné příkazy), `strazce-zapisu` (tajné klíče a chráněné soubory), `strazce-noci` (konektory a podagenti), `rezim` (den nebo noc), `prehled` (stav týmu na začátku session) |
 | `.claude/nastroje/` | `github-noc` (GitHub pro noční směnu: jen povolené akce přes REST) |
-| `.github/` | CI (testy a gitleaks), kontrola chráněných souborů, šablony issue a PR, Dependabot |
+| `.github/` | CI (testy a gitleaks), kontrola chráněných souborů, noční hlídač, šablony issue a PR, Dependabot |
 | `test/` | testy hooků a struktury týmů (kdo koho smí spouštět) |
 
 ## Týmy
