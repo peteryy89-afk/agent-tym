@@ -36,19 +36,34 @@ const pomalu = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- klíč a akce ----------
 
-// Klíč přichází jen ve fragmentu odkazu (server ho nikdy neposílá). Z adresního řádku zmizí
-// a do zavření karty zůstane v sessionStorage, aby fungovala obnova stránky.
-function nactiKlic() {
-  const zOdkazu = new URLSearchParams(location.hash.slice(1)).get('klic');
-  if (zOdkazu) history.replaceState(null, '', location.pathname);
+// Odkaz při spuštění nese jednorázovou vstupenku (ve fragmentu, server ji nikdy neposílá).
+// Stránka ji hned vymění za klíč relace a smaže z adresního řádku. Klíč relace zůstane
+// do zavření karty v sessionStorage, aby fungovala obnova stránky.
+function ulozenyKlic() {
   try {
-    if (zOdkazu) sessionStorage.setItem('velin-klic', zOdkazu);
-    return zOdkazu || sessionStorage.getItem('velin-klic');
+    return sessionStorage.getItem('velin-klic');
   } catch {
-    return zOdkazu;
+    return null;
   }
 }
-let klic = nactiKlic();
+let klic = ulozenyKlic();
+
+async function vymenVstupenku() {
+  const vstupenka = new URLSearchParams(location.hash.slice(1)).get('vstupenka');
+  if (!vstupenka) return;
+  history.replaceState(null, '', location.pathname);
+  try {
+    const odpoved = await fetch('/api/klic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vstupenka }) });
+    const vysledek = await odpoved.json().catch(() => ({}));
+    if (!odpoved.ok || !vysledek.klic) throw new Error(vysledek.chyba ?? `Chyba ${odpoved.status}`);
+    klic = vysledek.klic;
+    try {
+      sessionStorage.setItem('velin-klic', klic);
+    } catch {}
+  } catch (chyba) {
+    if (!klic) toast(chyba.message, 'chyba');
+  }
+}
 
 function zrusKlic() {
   klic = null;
@@ -201,7 +216,8 @@ const zari = (barva, sila) => new THREE.Color(barva).multiplyScalar(sila);
 
 function uvolni(objekt) {
   objekt.traverse((o) => {
-    if (o.geometry && !o.geometry.userData.sdilena) o.geometry.dispose();
+    // Sprity sdílejí jednu geometrii z Three.js, ta se neuvolňuje.
+    if (o.geometry && !o.isSprite && !o.geometry.userData.sdilena) o.geometry.dispose();
     for (const m of [o.material].flat()) {
       if (!m || m.userData.sdileny) continue;
       if (m.map && !m.map.userData.sdilena) m.map.dispose();
@@ -826,13 +842,13 @@ function panelPR(cislo) {
   const radek = el('div', 'radek');
   const schvaleny = p.stitky.includes('schvaleno-vlastnikem');
   const b = tlacitko(schvaleny ? 'Schváleno' : 'Schválit PR', (t) => {
-    if (confirm(`Schválit PR #${p.cislo}?\n\nPřidá štítek schvaleno-vlastnikem. Sloučí ho manažer po zelené CI.${jeNoc() ? HLIDAC : ''}`)) akce({ typ: 'schvalit', cislo: p.cislo }, t);
+    if (confirm(`Schválit PR #${p.cislo} v commitu ${String(p.sha).slice(0, 7)}?\n\nPřidá štítek schvaleno-vlastnikem. Když mezitím přibude nový commit, schválení neprojde. Sloučí ho manažer po zelené CI.${jeNoc() ? HLIDAC : ''}`)) akce({ typ: 'schvalit', cislo: p.cislo, sha: p.sha }, t);
   }, 'hlavni');
-  b.disabled = schvaleny || !klic;
+  b.disabled = schvaleny || !klic || !p.sha;
   radek.append(b);
   const url = urlGitHub('pull', p.cislo);
   if (url) radek.append(odkaz('Otevřít na GitHubu', url));
-  o.push(sekce('Akce', radek, el('p', 'drobne', 'Sloučení z Velínu není, to dělá manažer podle PROCES.md.')));
+  o.push(sekce('Akce', radek, el('p', 'drobne', `Commit ${String(p.sha ?? '?').slice(0, 7)}. Sloučení z Velínu není, to dělá manažer podle PROCES.md.`)));
   return o;
 }
 
@@ -857,12 +873,13 @@ function panelUkol(cislo) {
       akce({ typ: 'noc', cislo: i.cislo, zapnout: !naNoc }, t);
     }
   }, naNoc ? '' : 'hlavni');
-  b.disabled = !vlastni || !klic;
+  const rozdelany = i.stitky.some((s) => ['stav:rozpracovano', 'stav:revize', 'stav:ceka-na-vlastnika'].includes(s));
+  b.disabled = !vlastni || !klic || (!naNoc && rozdelany);
   noc.append(b);
   const url = urlGitHub('issues', i.cislo);
   if (url) noc.append(odkaz('Otevřít na GitHubu', url));
   o.push(sekce('Noc', noc, el('p', 'drobne', vlastni
-    ? 'Noční směna bere úkoly s noc:ano a stav:pripraveno bez štítků vetsi-akce, blokovano a pro-vlastnika.'
+    ? 'Noční směna bere úkoly s noc:ano a stav:pripraveno bez štítků vetsi-akce, blokovano a pro-vlastnika. Rozdělaný úkol na noc nejde.'
     : 'Na noc jde jen úkol, který jsi založil ty.')));
   return o;
 }
@@ -1133,6 +1150,7 @@ function snimek() {
 }
 
 ukazOvladani();
+vymenVstupenku().then(ukazOvladani);
 if (renderer) {
   renderer.setAnimationLoop(snimek);
   obnov();

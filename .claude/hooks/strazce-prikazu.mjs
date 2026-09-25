@@ -26,6 +26,8 @@ const DOTAZ = [
   [/\b(npm|pnpm|yarn)\s+(install|i|add)\s+\S/, 'Nová závislost je větší akce (PROCES.md, sekce 5).'],
   [/\bpip3?\s+install\b/, 'Nová závislost je větší akce (PROCES.md, sekce 5).'],
   [/schvaleno-vlastnikem/, 'Štítek schvaleno-vlastnikem smí dát jen vlastník. Potvrď, jen pokud jsi to právě schválil ty.'],
+  // Velín s tlačítky spouští jen vlastník ve svém terminálu (PROCES.md, Velín).
+  [/\bnode\b[^|;&\n]*skripty[\\/]velin(\.mjs)?\b|\b(npm|pnpm|yarn)\s+(run\s+)?velin\b|\/api\/(akce|klic)\b|x-velin-klic|CLAUDECODE/i, 'Velín s tlačítky spouští jen vlastník ve svém terminálu. Agent ho nespouští a na /api/akce nesahá.'],
   [new RegExp(String.raw`(\bsed\s+(-\w*\s+)*-i|\btee\b|\bcp\b|\bmv\b|\brm\b|>)[^|;&]*` + CHRANENE_CESTY), 'Zápis do chráněného souboru přes příkazovou řádku. Změnu schvaluje vlastník (PROCES.md, sekce 6).'],
 ];
 

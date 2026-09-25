@@ -58,7 +58,7 @@ const issue = (number, labels = [], autor = 'vlastnik', dalsi = {}) => ({ number
 const jmena = (i) => i.labels.map((l) => l.name).sort();
 
 test('akce: poslat na noc nastaví noc:ano a stav připraveno, jen u úkolu vlastníka', async () => {
-  const f = falesnyGh({ issues: { 4: issue(4, ['stav:napad', 'platforma']), 5: issue(5, [], 'cizi'), 6: issue(6, [], 'vlastnik', { state: 'closed' }), 7: issue(7, [], 'vlastnik', { pull_request: {} }), 8: issue(8, ['vetsi-akce']) } });
+  const f = falesnyGh({ issues: { 4: issue(4, ['stav:napad', 'platforma']), 5: issue(5, [], 'cizi'), 6: issue(6, [], 'vlastnik', { state: 'closed' }), 7: issue(7, [], 'vlastnik', { pull_request: {} }), 8: issue(8, ['vetsi-akce']), 9: issue(9, ['stav:rozpracovano']) } });
   const proved = vytvorAkce({ repo: 'org/repo', gh: f.gh });
   assert.match(await proved({ typ: 'noc', cislo: 4, zapnout: true }), /poslán na noc/);
   assert.deepEqual(jmena(f.issues[4]), ['noc:ano', 'platforma', 'stav:pripraveno']);
@@ -67,29 +67,36 @@ test('akce: poslat na noc nastaví noc:ano a stav připraveno, jen u úkolu vlas
   await assert.rejects(proved({ typ: 'noc', cislo: 7, zapnout: true }), /ne PR/);
   await assert.rejects(proved({ typ: 'noc', cislo: 4 }), /true\/false/);
   assert.match(await proved({ typ: 'noc', cislo: 8, zapnout: true }), /nevezme kvůli štítku vetsi-akce/);
+  await assert.rejects(proved({ typ: 'noc', cislo: 9, zapnout: true }), /rozpracovano/);
+  assert.deepEqual(jmena(f.issues[9]), ['stav:rozpracovano'], 'rozdělaný úkol se nevrátí do fronty');
   assert.match(await proved({ typ: 'noc', cislo: 4, zapnout: false }), /odebrán/);
   assert.deepEqual(jmena(f.issues[4]), ['platforma', 'stav:pripraveno']);
   await proved({ typ: 'noc', cislo: 4, zapnout: false }); // chybějící štítek (404) nevadí
 });
 
 test('akce: zastavit a pustit noc přes issue se štítkem noc:stop', async () => {
-  const f = falesnyGh();
+  const f = falesnyGh({ issues: { 50: issue(50, ['noc:stop'], 'vlastnik', { pull_request: {} }) } });
   const proved = vytvorAkce({ repo: 'org/repo', gh: f.gh });
-  assert.match(await proved({ typ: 'nocStop', zapnout: true }), /Noc zastavena \(#100\)/);
+  assert.match(await proved({ typ: 'nocStop', zapnout: true }), /Noc zastavena \(#100\)/, 'PR se štítkem noc:stop noc nezastavuje');
   assert.match(await proved({ typ: 'nocStop', zapnout: true }), /už je zastavená/);
   assert.match(await proved({ typ: 'nocStop', zapnout: false }), /Noc puštěna/);
   assert.equal(f.issues[100].state, 'closed');
+  assert.equal(f.issues[50].state, 'open', 'PR se nezavírá');
   assert.match(await proved({ typ: 'nocStop', zapnout: false }), /nebyla zastavená/);
   await assert.rejects(proved({ typ: 'nocStop' }), /true\/false/);
 });
 
 test('akce: schválení přidá jen štítek, nic neslučuje', async () => {
-  const f = falesnyGh({ pulls: { 15: { number: 15, state: 'open', labels: [{ name: 'vetsi-akce' }] }, 16: { number: 16, state: 'closed', labels: [] } } });
+  const SHA = 'a'.repeat(40);
+  const f = falesnyGh({ pulls: { 15: { number: 15, state: 'open', head: { sha: SHA }, labels: [{ name: 'vetsi-akce' }] }, 16: { number: 16, state: 'closed', head: { sha: SHA }, labels: [] } } });
   const proved = vytvorAkce({ repo: 'org/repo', gh: f.gh });
-  assert.match(await proved({ typ: 'schvalit', cislo: 15 }), /schválen/);
+  await assert.rejects(proved({ typ: 'schvalit', cislo: 15 }), /Chybí commit/);
+  await assert.rejects(proved({ typ: 'schvalit', cislo: 15, sha: 'b'.repeat(40) }), /nový commit/);
+  assert.ok(!f.pulls[15].labels.some((l) => l.name === 'schvaleno-vlastnikem'), 'jiný commit se neschválí');
+  assert.match(await proved({ typ: 'schvalit', cislo: 15, sha: SHA }), /schválen/);
   assert.ok(f.pulls[15].labels.some((l) => l.name === 'schvaleno-vlastnikem'));
-  assert.match(await proved({ typ: 'schvalit', cislo: 15 }), /už je schválený/);
-  await assert.rejects(proved({ typ: 'schvalit', cislo: 16 }), /není otevřený/);
+  assert.match(await proved({ typ: 'schvalit', cislo: 15, sha: SHA }), /už je schválený/);
+  await assert.rejects(proved({ typ: 'schvalit', cislo: 16, sha: SHA }), /není otevřený/);
   assert.ok(f.volani.every((v) => !/merge/.test(v.cesta) && v.metoda !== 'PUT'), 'žádné sloučení');
 });
 
@@ -124,7 +131,7 @@ test('akce: neznámé akce, čísla a repozitáře se odmítnou', async () => {
   const proved = vytvorAkce({ repo: 'org/repo', gh: f.gh });
   for (const typ of ['merge', '__proto__', 'constructor', 'toString', undefined]) await assert.rejects(proved({ typ }), /Neznámá akce/, String(typ));
   await assert.rejects(proved(null), /Neznámá akce/);
-  for (const cislo of ['4', 0, -1, 1.5, 1e8, '4/labels']) await assert.rejects(proved({ typ: 'schvalit', cislo }), /Neplatné číslo/, String(cislo));
+  for (const cislo of ['4', 0, -1, 1.5, 1e8, '4/labels']) await assert.rejects(proved({ typ: 'stav', cislo, stav: 'stav:napad' }), /Neplatné číslo/, String(cislo));
   for (const repo of ['org', 'org/../x', 'org/repo/issues', '', null, 'a b/c']) assert.throws(() => vytvorAkce({ repo, gh: f.gh }), /není známý/, String(repo));
   assert.equal(f.volani.length, 0);
 });
@@ -190,6 +197,32 @@ test('server: akce jen se stejným původem, klíčem a JSON', async () => {
     assert.equal((await pozadavek(port, { method: 'POST', cesta: '/', hlavicky: spravne, telo: '{}' })).kod, 405);
     assert.equal((await pozadavek(port, { method: 'PUT', cesta: '/api/akce', hlavicky: spravne, telo: '{}' })).kod, 405);
     assert.equal((await pozadavek(port, { method: 'POST', cesta: '/api/akce', hlavicky: { ...spravne, host: 'utocnik.example' }, telo: '{}' })).kod, 403);
+  } finally {
+    server.close();
+  }
+});
+
+test('server: jednorázová vstupenka se vymění za klíč relace', async () => {
+  const stav = sestavStav({ agenti: nactiAgenty(), udalosti: [], github: null, ted: 0 });
+  const vstupenka = 'c'.repeat(48);
+  const server = http.createServer(obsluha(async () => stav, () => server.address().port, { vstupenka, proved: async () => 'Hotovo.' }));
+  await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+  const port = server.address().port;
+  const hlavicky = { origin: `http://127.0.0.1:${port}`, 'content-type': 'application/json' };
+  const vymen = (telo, h = hlavicky) => pozadavek(port, { method: 'POST', cesta: '/api/klic', hlavicky: h, telo });
+  try {
+    assert.equal((await vymen(JSON.stringify({ vstupenka }), { ...hlavicky, origin: 'http://utocnik.example' })).kod, 403);
+    assert.equal((await vymen(JSON.stringify({ vstupenka: 'd'.repeat(48) }))).kod, 403);
+    assert.equal((await vymen('{nejson')).kod, 400);
+    const ok = await vymen(JSON.stringify({ vstupenka }));
+    assert.equal(ok.kod, 200);
+    const { klic } = JSON.parse(ok.telo);
+    assert.match(klic, /^[0-9a-f]{48}$/);
+    assert.notEqual(klic, vstupenka);
+    assert.equal((await vymen(JSON.stringify({ vstupenka }))).kod, 403, 'vstupenka platí jednou');
+    const akce = (k) => pozadavek(port, { method: 'POST', cesta: '/api/akce', hlavicky: { ...hlavicky, 'x-velin-klic': k }, telo: '{"typ":"x"}' });
+    assert.equal((await akce(vstupenka)).kod, 403, 'vstupenka není klíč');
+    assert.equal((await akce(klic)).kod, 200);
   } finally {
     server.close();
   }

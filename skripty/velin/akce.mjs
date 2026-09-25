@@ -64,6 +64,8 @@ export function vytvorAkce({ repo, gh = ghCli }) {
         await odeber(n, 'noc:ano');
         return `#${n}: odebrán z noci.`;
       }
+      const rozdelane = stitky(issue).filter((s) => STAVY.includes(s) && !['stav:napad', 'stav:pripraveno'].includes(s));
+      if (rozdelane.length) throw new Error(`#${n} je ve stavu ${rozdelane.join(', ')}. Na noc jde jen nápad nebo připravený úkol.`);
       await nastavStav(n, issue, 'stav:pripraveno');
       await pridej(n, 'noc:ano');
       const prekazky = stitky(issue).filter((s) => VYLUCUJICI.includes(s));
@@ -73,7 +75,7 @@ export function vytvorAkce({ repo, gh = ghCli }) {
     },
 
     async nocStop({ zapnout }) {
-      const otevrene = await api('/issues?state=open&labels=noc:stop&per_page=100');
+      const otevrene = (await api('/issues?state=open&labels=noc:stop&per_page=100')).filter((i) => !i.pull_request);
       if (zapnout === true) {
         if (otevrene.length) return 'Noc už je zastavená.';
         const nove = await api('/issues', 'POST', {
@@ -88,9 +90,12 @@ export function vytvorAkce({ repo, gh = ghCli }) {
       return otevrene.length ? `Noc puštěna (zavřeno ${otevrene.length}× noc:stop).` : 'Noc nebyla zastavená.';
     },
 
-    async schvalit({ cislo: n }) {
+    // Schvaluje se commit, který vlastník viděl. Když mezitím přibyl nový, schválení neprojde.
+    async schvalit({ cislo: n, sha }) {
+      if (!/^[0-9a-f]{40}$/.test(sha ?? '')) throw new Error('Chybí commit, který schvaluješ. Obnov stránku.');
       const pr = await api(`/pulls/${cislo(n)}`);
       if (pr.state !== 'open') throw new Error('PR není otevřený.');
+      if (pr.head?.sha !== sha) throw new Error(`PR #${n} má mezitím nový commit. Zkontroluj ho a schval znovu.`);
       if (stitky(pr).includes('schvaleno-vlastnikem')) return `PR #${n} už je schválený.`;
       await pridej(n, 'schvaleno-vlastnikem');
       return `PR #${n} schválen. Sloučí ho manažer po zelené CI.`;
