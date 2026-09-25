@@ -61,6 +61,17 @@ export const dnes = (datum = new Date()) => new Intl.DateTimeFormat('sv-SE', { t
 const stitky = (issue) => issue.labels.map((s) => (typeof s === 'string' ? s : s.name));
 const stejny = (a, b) => a.toLowerCase() === b.toLowerCase();
 
+// Fronta noční směny z otevřených issues. Používá ji i Velín, aby ukazoval stejné úkoly.
+export function vyberFrontu(otevrene, vlastnik) {
+  return otevrene
+    .filter((i) => !i.pull_request && stejny(i.user?.login ?? '', vlastnik))
+    .filter((i) => stitky(i).includes('noc:ano') && stitky(i).includes('stav:pripraveno'))
+    .filter((i) => !stitky(i).some((s) => VYLUCUJICI.includes(s)))
+    .sort((a, b) => a.number - b.number)
+    .slice(0, MAX_UKOLU)
+    .map((i) => ({ cislo: i.number, nazev: i.title }));
+}
+
 function cislo(hodnota) {
   if (!/^\d+$/.test(String(hodnota))) throw new Error(`Neplatné číslo issue nebo PR: ${hodnota}`);
   return Number(hodnota);
@@ -103,13 +114,7 @@ export function vytvorNastroj(gh, repo, { spi = () => {}, ted = () => Date.now()
     stav() {
       const otevrene = gh.seznam(`repos/${repo}/issues?state=open&per_page=100`).filter((i) => !i.pull_request);
       const zpravy = gh.seznam(`repos/${repo}/issues?state=all&labels=ranni-zprava&per_page=100`);
-      const fronta = otevrene
-        .filter((i) => stejny(i.user.login, vlastnik()))
-        .filter((i) => stitky(i).includes('noc:ano') && stitky(i).includes('stav:pripraveno'))
-        .filter((i) => !stitky(i).some((s) => VYLUCUJICI.includes(s)))
-        .sort((a, b) => a.number - b.number)
-        .slice(0, MAX_UKOLU)
-        .map((i) => ({ cislo: i.number, nazev: i.title }));
+      const fronta = vyberFrontu(otevrene, vlastnik());
       return {
         vlastnik: vlastnik(),
         dnes: dnes(),

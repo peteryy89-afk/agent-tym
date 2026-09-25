@@ -85,6 +85,8 @@ stav:napad → stav:pripraveno → stav:rozpracovano → stav:revize → (stav:c
 
 **Kontrola chráněných souborů na GitHubu:** workflow `chranene-soubory` běží z `main` (`pull_request_target`), takže ho PR nemůže změnit. Selže, když PR mění chráněný soubor a nemá štítek `schvaleno-vlastnikem`. Nový commit po schválení štítek odebere, vlastník ho po kontrole přidá znovu.
 
+**Velín a záznam aktivity:** hook `zaznam-aktivity` zapisuje do `.agent-tym/aktivita.jsonl` (v `.gitignore`), kdy který agent začal a skončil, kdo ho spustil a krátký popis úkolu. Nikdy nezapisuje zadání, cesty ani klíče a nic neblokuje. `skripty/velin.mjs` z něj a z GitHubu skládá místní přehled. Velín jen čte, stav se dál vede štítky (sekce 3). Spuštění mimo řetěz velení (sekce 1) označí jako „mimo řetěz“.
+
 ## 7. Pravidla proti halucinaci
 
 1. **Fakta se štítky:** [OVĚŘENO] se zdrojem (soubor:řádek, URL, výstup příkazu), [NEOVĚŘENO], [NÁZOR]. Čísla se nevymýšlejí.
