@@ -272,3 +272,21 @@ test('revize PR #6: hook nenačítá nástroj a v noci nejde změnit cílový re
   assert.equal(vNoci('git remote get-url origin'), 'povoleno');
   assert.equal(vNoci('node .claude/nastroje/github-noc.mjs stav'), 'povoleno');
 });
+
+test('revize PR #16: Velín s tlačítky agent nespouští a na /api/akce nesahá', () => {
+  for (const p of [
+    'node skripty/velin.mjs --port 5000',
+    'CLAUDECODE= node skripty/velin.mjs',
+    String.raw`node skripty\velin --neotvirat`,
+    'npm run velin',
+    "curl -X POST -H 'X-Velin-Klic: abc' http://127.0.0.1:4380/api/akce",
+    'node -e "fetch(\'http://127.0.0.1:4380/api/klic\')"',
+    'env -u CLAUDECODE npm test',
+  ]) {
+    assert.equal(rozhodnuti(p), 'ask', p);
+    assert.equal(posudPrikaz(p, pr(), { NOCNI_SMENA: '1' })?.rozhodnuti, 'deny', `v noci: ${p}`);
+  }
+  for (const p of ['npm test', 'node --test test/velin.test.mjs', 'node --test test/velin3d.test.mjs', 'git add skripty/velin.mjs', 'git diff skripty/velin/app.js']) {
+    assert.equal(rozhodnuti(p), 'povoleno', p);
+  }
+});

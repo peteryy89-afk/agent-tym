@@ -1,15 +1,18 @@
 // Velín: místní přehled práce týmu. Kdo teď pracuje a na čem, stav úkolů a PR, co čeká na vlastníka
-// a noční směna. Jen čte: stav se dál vede štítky na GitHubu.
+// a noční směna. 3D pohled (skripty/velin/) s tlačítky, která jen mění štítky a zakládají issues,
+// a jednoduchý 2D přehled bez JavaScriptu na /prehled. Stav se dál vede štítky na GitHubu.
 // Zdroje: definice agentů (.claude/agents), GitHub REST přes `gh api` a záznam aktivity
 // z hooku zaznam-aktivity (.agent-tym/aktivita.jsonl, jen tento počítač).
-// Server poslouchá jen na 127.0.0.1, odpovídá jen na GET a stránka nemá žádný JavaScript.
-import { execFile } from 'node:child_process';
+// Server poslouchá jen na 127.0.0.1. Akce vyžadují klíč, který se předá jen v odkazu při spuštění.
+import { execFile, spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { repozitar, vyberFrontu } from '../.claude/nastroje/github-noc.mjs';
 import { SOUBOR as SOUBOR_ZAZNAMU } from '../.claude/hooks/zaznam-aktivity.mjs';
+import { vytvorAkce } from './velin/akce.mjs';
 
 export const KOREN = fileURLToPath(new URL('../', import.meta.url));
 export const PORT = 4380;
@@ -186,7 +189,7 @@ export async function nactiGitHub(repo, api = ghApi) {
         kontroly = Object.fromEntries(Object.entries(nejnovejsi).map(([n, k]) => [n, k.status === 'completed' ? k.conclusion : k.status]));
       } catch {}
     }
-    return { cislo: p.number, nazev: p.title, vetev: p.head?.ref ?? '', stitky: stitky(p), kontroly };
+    return { cislo: p.number, nazev: p.title, vetev: p.head?.ref ?? '', sha: p.head?.sha ?? null, stitky: stitky(p), kontroly };
   }));
   const vlastnik = info.owner?.login ?? null;
   return {
@@ -370,26 +373,130 @@ ${tedPracuje}${githubHtml}${tym}${historie}
 
 // ---------- server ----------
 
-const BEZPECNOST = {
-  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+const ZAKLAD = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
   'Cache-Control': 'no-store',
+  'Cross-Origin-Resource-Policy': 'same-origin',
 };
+const CSP_2D = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const csp3d = (nonce) => `default-src 'none'; script-src 'self' 'nonce-${nonce}'; style-src 'self'; connect-src 'self'; img-src 'self' data: blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+export const SLOZKA_3D = fileURLToPath(new URL('./velin/', import.meta.url));
+const TYPY = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
+const MAX_TELO = 16 * 1024;
 
-export function obsluha(ziskejStav, port) {
+// Statické soubory jen podle seznamu sestaveného při startu, žádné skládání cest z URL.
+export function nactiStaticke(slozka = SLOZKA_3D) {
+  const mapa = new Map();
+  const projdi = (adresar, prefix) => {
+    for (const polozka of fs.readdirSync(adresar, { withFileTypes: true })) {
+      const plna = path.join(adresar, polozka.name);
+      if (polozka.isDirectory()) projdi(plna, `${prefix}${polozka.name}/`);
+      else if (TYPY[path.extname(polozka.name)] && polozka.name !== 'index.html' && !polozka.name.endsWith('.mjs')) {
+        mapa.set(`/static/${prefix}${polozka.name}`, { soubor: plna, typ: TYPY[path.extname(polozka.name)] });
+      }
+    }
+  };
+  projdi(slozka, '');
+  return mapa;
+}
+
+function stejnyKlic(a, b) {
+  const x = Buffer.from(String(a ?? ''));
+  const y = Buffer.from(String(b ?? ''));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
+function prectiTelo(pozadavek) {
+  return new Promise((hotovo, chyba) => {
+    let delka = 0;
+    const kusy = [];
+    const limit = setTimeout(() => {
+      chyba(new Error('Požadavek trval příliš dlouho.'));
+      pozadavek.destroy();
+    }, 10_000);
+    pozadavek.on('close', () => clearTimeout(limit));
+    pozadavek.on('data', (kus) => {
+      delka += kus.length;
+      if (delka > MAX_TELO) {
+        chyba(new Error('Požadavek je příliš velký.'));
+        pozadavek.destroy();
+      } else kusy.push(kus);
+    });
+    pozadavek.on('end', () => hotovo(Buffer.concat(kusy).toString('utf8')));
+    pozadavek.on('error', chyba);
+  });
+}
+
+// ziskejStav: funkce vracející stav (se .obnov() pro zahození keše po akci).
+// moznosti: vstupenka (jednorázová, z odkazu při spuštění), klic (klíč relace, jinak vznikne výměnou
+// za vstupenku), proved (funkce akcí), staticke (mapa souborů), index (HTML 3D pohledu).
+// Odkaz se vstupenkou zůstane v historii prohlížeče a v příkazové řádce, proto platí jen jednou:
+// stránka ji hned vymění za klíč relace, který nikde jinde není.
+export function obsluha(ziskejStav, port, { vstupenka = null, klic = null, proved = null, staticke = new Map(), index = null } = {}) {
   return async (pozadavek, odpoved) => {
     const p = typeof port === 'function' ? port() : port;
     const posli = (kod, typ, telo, navic = {}) => {
-      odpoved.writeHead(kod, { ...BEZPECNOST, 'Content-Type': typ, ...navic });
+      odpoved.writeHead(kod, { ...ZAKLAD, 'Content-Security-Policy': CSP_2D, 'Content-Type': typ, ...navic });
       odpoved.end(telo);
     };
-    if (pozadavek.method !== 'GET' && pozadavek.method !== 'HEAD') return posli(405, 'text/plain; charset=utf-8', 'Velín jen čte.', { Allow: 'GET, HEAD' });
+    const json = (kod, data) => posli(kod, 'application/json; charset=utf-8', JSON.stringify(data));
+    const povolene = [`127.0.0.1:${p}`, `localhost:${p}`];
     // Kontrola hlavičky Host brání DNS rebinding: cizí web se na server nedostane přes vlastní doménu.
-    if (![`127.0.0.1:${p}`, `localhost:${p}`].includes(pozadavek.headers.host)) return posli(403, 'text/plain; charset=utf-8', 'Nepovolený Host.');
-    if (pozadavek.url.split('?')[0] !== '/') return posli(404, 'text/plain; charset=utf-8', 'Nenalezeno.');
+    if (!povolene.includes(pozadavek.headers.host)) return posli(403, 'text/plain; charset=utf-8', 'Nepovolený Host.');
+    const cesta = pozadavek.url.split('?')[0];
+
+    const zVelinu = () => povolene.map((h) => `http://${h}`).includes(pozadavek.headers.origin);
+    const jeJson = () => String(pozadavek.headers['content-type'] ?? '').startsWith('application/json');
+
+    if (pozadavek.method === 'POST' && cesta === '/api/klic') {
+      if (!zVelinu()) return json(403, { chyba: 'Nepovolený původ požadavku.' });
+      if (!jeJson()) return json(415, { chyba: 'Očekávám JSON.' });
+      let data;
+      try {
+        data = JSON.parse(await prectiTelo(pozadavek));
+      } catch {
+        return json(400, { chyba: 'Neplatný požadavek.' });
+      }
+      if (!vstupenka || !proved || !stejnyKlic(data?.vstupenka, vstupenka)) {
+        return json(403, { chyba: 'Odkaz už byl použitý nebo neplatí. Pro ovládání spusť Velín znovu ve svém terminálu.' });
+      }
+      vstupenka = null;
+      klic = crypto.randomBytes(24).toString('hex');
+      return json(200, { klic });
+    }
+
+    if (pozadavek.method === 'POST' && cesta === '/api/akce') {
+      // Akce jen ze stránky Velínu: stejný původ a klíč relace (vznikl výměnou za vstupenku).
+      if (!zVelinu()) return json(403, { chyba: 'Nepovolený původ požadavku.' });
+      if (!klic || !proved || !stejnyKlic(pozadavek.headers['x-velin-klic'], klic)) return json(403, { chyba: 'Chybí klíč pro ovládání. Otevři Velín odkazem z terminálu.' });
+      if (!jeJson()) return json(415, { chyba: 'Očekávám JSON.' });
+      let data;
+      try {
+        data = JSON.parse(await prectiTelo(pozadavek));
+      } catch (chyba) {
+        return json(400, { chyba: chyba.message.startsWith('Požadavek') ? chyba.message : 'Neplatný JSON.' });
+      }
+      try {
+        const zprava = await proved(data);
+        ziskejStav.obnov?.();
+        return json(200, { ok: true, zprava });
+      } catch (chyba) {
+        return json(400, { chyba: String(chyba.message ?? chyba).slice(0, 300) });
+      }
+    }
+
+    if (pozadavek.method !== 'GET' && pozadavek.method !== 'HEAD') return posli(405, 'text/plain; charset=utf-8', 'Nepovolená metoda.', { Allow: 'GET, HEAD, POST' });
     try {
-      return posli(200, 'text/html; charset=utf-8', vykresli(await ziskejStav()));
+      if (cesta === '/' && index) {
+        const nonce = crypto.randomBytes(16).toString('base64');
+        return posli(200, 'text/html; charset=utf-8', index.replaceAll('{{NONCE}}', nonce), { 'Content-Security-Policy': csp3d(nonce) });
+      }
+      if (cesta === '/' || cesta === '/prehled') return posli(200, 'text/html; charset=utf-8', vykresli(await ziskejStav()));
+      if (cesta === '/api/stav') return json(200, await ziskejStav());
+      const soubor = staticke.get(cesta);
+      if (soubor) return posli(200, soubor.typ, fs.readFileSync(soubor.soubor));
+      return posli(404, 'text/plain; charset=utf-8', 'Nenalezeno.');
     } catch {
       return posli(500, 'text/plain; charset=utf-8', 'Velín nemohl sestavit přehled.');
     }
@@ -399,7 +506,7 @@ export function obsluha(ziskejStav, port) {
 // Data z GitHubu se kešují, aby obnova stránky nevyčerpala limit API. Záznam se čte pokaždé.
 export function zdrojStavu({ repo = null, api, agenti = () => nactiAgenty(), udalosti = () => nactiZaznam(), ted = () => Date.now() } = {}) {
   let kes = null;
-  return async () => {
+  const ziskej = async () => {
     const t = ted();
     if (!kes || t - kes.t > KES_MS) {
       try {
@@ -411,15 +518,31 @@ export function zdrojStavu({ repo = null, api, agenti = () => nactiAgenty(), uda
     }
     return sestavStav({ agenti: agenti(), udalosti: udalosti(), github: kes.github, chybaGitHubu: kes.chyba, repo, ted: t });
   };
+  ziskej.obnov = () => {
+    kes = null;
+  };
+  return ziskej;
 }
 
 const NAPOVEDA = `Velín: místní přehled práce týmu agentů.
 
 Použití:
-  node skripty/velin.mjs              spustí server na http://127.0.0.1:${PORT}
+  node skripty/velin.mjs              spustí server a otevře 3D Velín v prohlížeči
+  node skripty/velin.mjs --neotvirat  jen vypíše odkaz (s klíčem pro ovládání)
   node skripty/velin.mjs --port 5000  jiný port
   node skripty/velin.mjs --json       vypíše přehled jako JSON a skončí
-  node skripty/velin.mjs --help       tato nápověda`;
+  node skripty/velin.mjs --help       tato nápověda
+
+Tlačítka odemkne jednorázový odkaz, který Velín vypíše a otevře. Bez něj jde Velín jen prohlížet.
+Velín spouští vlastník ve vlastním terminálu, agenti ho nespouštějí.`;
+
+function otevri(url) {
+  const [prikaz, argumenty] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', url]]
+    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  try {
+    spawn(prikaz, argumenty, { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  } catch {}
+}
 
 async function main(argumenty = process.argv.slice(2)) {
   if (argumenty.includes('--help')) return console.log(NAPOVEDA);
@@ -436,12 +559,25 @@ async function main(argumenty = process.argv.slice(2)) {
     process.exitCode = 1;
     return;
   }
-  const server = http.createServer(obsluha(ziskej, port));
+  // Tlačítka má jen vlastník ve vlastním terminálu. Spuštění z Claude Code nebo na pozadí
+  // (výstup není terminál) by odkaz dalo agentovi, proto je Velín tam jen pro prohlížení.
+  // Druhá vrstva: strazce-prikazu se ptá na každé spuštění Velínu a volání /api/akce.
+  const ovladani = Boolean(process.stdout.isTTY) && !process.env.CLAUDECODE;
+  const vstupenka = ovladani ? crypto.randomBytes(24).toString('hex') : null;
+  const proved = repo && vstupenka ? vytvorAkce({ repo }) : null;
+  const index = fs.readFileSync(path.join(SLOZKA_3D, 'index.html'), 'utf8');
+  const server = http.createServer(obsluha(ziskej, port, { vstupenka, proved, staticke: nactiStaticke(), index }));
   server.on('error', (chyba) => {
     console.error(chyba.code === 'EADDRINUSE' ? `Port ${port} je obsazený. Zkus --port <jiný>.` : `Server nešel spustit: ${chyba.message}`);
     process.exitCode = 1;
   });
-  server.listen(port, '127.0.0.1', () => console.log(`Velín běží na http://127.0.0.1:${port} (ukončíš Ctrl+C).`));
+  server.listen(port, '127.0.0.1', () => {
+    const url = vstupenka ? `http://127.0.0.1:${port}/#vstupenka=${vstupenka}` : `http://127.0.0.1:${port}/`;
+    console.log(`Velín běží: ${url}\n2D přehled: http://127.0.0.1:${port}/prehled`);
+    console.log(vstupenka ? 'Odkaz platí jednou, pro první otevřenou stránku. Ukončíš Ctrl+C.'
+      : 'Spuštěno z Claude Code nebo bez terminálu: jen prohlížení. Pro tlačítka spusť `npm run velin` ve vlastním terminálu.');
+    if (!argumenty.includes('--neotvirat')) otevri(url);
+  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

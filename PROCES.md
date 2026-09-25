@@ -85,7 +85,7 @@ stav:napad → stav:pripraveno → stav:rozpracovano → stav:revize → (stav:c
 
 **Kontrola chráněných souborů na GitHubu:** workflow `chranene-soubory` běží z `main` (`pull_request_target`), takže ho PR nemůže změnit. Selže, když PR mění chráněný soubor a nemá štítek `schvaleno-vlastnikem`. Nový commit po schválení štítek odebere, vlastník ho po kontrole přidá znovu.
 
-**Velín a záznam aktivity:** hook `zaznam-aktivity` zapisuje do `.agent-tym/aktivita.jsonl` (v `.gitignore`), kdy který agent začal a skončil, kdo ho spustil a krátký popis úkolu. Nikdy nezapisuje zadání, cesty ani klíče a nic neblokuje. `skripty/velin.mjs` z něj a z GitHubu skládá místní přehled. Velín jen čte, stav se dál vede štítky (sekce 3). Spuštění mimo řetěz velení (sekce 1) označí jako „mimo řetěz“.
+**Velín a záznam aktivity:** hook `zaznam-aktivity` zapisuje do `.agent-tym/aktivita.jsonl` (v `.gitignore`), kdy který agent začal a skončil, kdo ho spustil a krátký popis úkolu. Nikdy nezapisuje zadání, cesty ani klíče a nic neblokuje. `skripty/velin.mjs` z něj a z GitHubu skládá místní přehled. Stav se dál vede štítky (sekce 3). Spuštění mimo řetěz velení (sekce 1) označí jako „mimo řetěz“. Tlačítka ve Velínu jsou jen pro vlastníka: poslat úkol na noc (`noc:ano` a `stav:pripraveno`), zastavit a pustit noc (`noc:stop`), schválit PR (`schvaleno-vlastnikem`), posunout stav a založit úkol. Velín nic neslučuje. Klíč k tlačítkům dostane jen ten, kdo Velín spustí ve vlastním terminálu. Agenti Velín nespouštějí a na `/api/akce` nesahají, spuštění z Claude Code je jen pro prohlížení.
 
 ## 7. Pravidla proti halucinaci
 

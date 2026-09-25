@@ -270,7 +270,7 @@ function pozadavek(port, { method = 'GET', cesta = '/', host } = {}) {
   });
 }
 
-test('server: jen GET, jen místní Host, CSP bez skriptů', async () => {
+test('server bez 3D: 2D přehled, jen místní Host, CSP bez skriptů', async () => {
   const stav = sestavStav({ agenti: nactiAgenty(), udalosti: [], github: null, chybaGitHubu: 'test', ted: T0 });
   const server = http.createServer(obsluha(async () => stav, () => server.address().port));
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
@@ -286,7 +286,10 @@ test('server: jen GET, jen místní Host, CSP bez skriptů', async () => {
     assert.equal((await pozadavek(port, { host: 'utocnik.example:80' })).kod, 403);
     assert.equal((await pozadavek(port, { host: `127.0.0.1:${port}.utocnik.example` })).kod, 403);
     assert.equal((await pozadavek(port, { cesta: '/../.env' })).kod, 404);
-    assert.equal((await pozadavek(port, { cesta: '/api/stav' })).kod, 404);
+    const json = await pozadavek(port, { cesta: '/api/stav' });
+    assert.equal(json.kod, 200);
+    assert.equal(JSON.parse(json.telo).chybaGitHubu, 'test');
+    assert.equal((await pozadavek(port, { method: 'POST', cesta: '/api/akce' })).kod, 403, 'bez klíče a původu akce nejdou');
   } finally {
     server.close();
   }
