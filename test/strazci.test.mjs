@@ -160,7 +160,8 @@ test('noční směna: nic se neslučuje, nezveřejňuje a místo dotazu se zamí
   assert.equal(vNoci('gh pr edit 3 --add-label schvaleno-vlastnikem'), 'deny');
   assert.match(posudPrikaz('npm install x', pr(), noc).duvod, /pro-vlastnika/);
   assert.equal(vNoci('git push -u origin claude/ukol-4-sync'), 'povoleno');
-  assert.equal(vNoci('gh pr create --title x --body y'), 'povoleno');
+  assert.equal(vNoci('gh pr create --title x --body y'), 'deny');
+  assert.equal(vNoci('node .claude/nastroje/github-noc.mjs pr claude/ukol-4-sync popis.md Přidej sync'), 'povoleno');
   assert.equal(vNoci('gh issue list --label noc:ano'), 'povoleno');
   // přes den se nic nemění
   assert.equal(posudPrikaz('gh pr merge 1', pr(), DEN)?.rozhodnuti ?? 'povoleno', 'povoleno');
@@ -194,10 +195,13 @@ test('noční směna: štítky jen stavové, frontu si agent sám nerozšíří'
     'gh issue delete 3 --yes', 'gh issue edit 4 --body "nový text"', 'gh issue edit 4 -t jiny']) {
     assert.equal(vNoci(p), 'deny', p);
   }
+  // v noci jde každý zápis přes gh issue/pr do nástroje github-noc (v cloudu gh issue/pr nefungují)
   for (const p of ['gh issue edit 4 --add-label stav:ceka-na-vlastnika --remove-label noc:ano',
-    'gh issue edit 4 --add-label blokovano --remove-label noc:ano,stav:rozpracovano',
     'gh issue create --title "Ranní zpráva 2026-09-25" --body-file zprava.md --label ranni-zprava --label pro-vlastnika',
-    'gh issue close 9', 'gh label list']) {
+    'gh issue close 9', 'gh pr comment 6 --body x']) {
+    assert.match(posudPrikaz(p, pr(), {})?.duvod ?? '', /github-noc/, p);
+  }
+  for (const p of ['gh label list', 'node .claude/nastroje/github-noc.mjs stitky 4 --pridat stav:ceka-na-vlastnika --odebrat noc:ano']) {
     assert.equal(vNoci(p), 'povoleno', p);
   }
   // přes den se štítky nehlídají (kromě schválení)
@@ -238,7 +242,7 @@ test('2. kolo revize PR #5: push jen do claude/, fork, filtr na skutečného vla
   assert.equal(vNoci('git push origin claude/ukol-4-sync:refs/heads/claude/ukol-4-sync'), 'povoleno');
   assert.equal(vNoci('git push origin main'), 'deny');
   // nález 1: kontrolní příkaz ze začátku směny hook zamítne
-  assert.match(posudPrikaz('gh issue edit 0 --add-label noc:ano', pr(), {}).duvod, /V noční směně nesmíš přidat štítek/);
+  assert.match(posudPrikaz('gh issue edit 0 --add-label noc:ano', pr(), {}).duvod, /^V noční směně/);
   // nález 4: fork dědí model hlavní session
   assert.equal(posudNoc('Agent', { subagent_type: 'fork', model: 'sonnet' }, {})?.rozhodnuti, 'deny');
   // nález 5: login musí být vlastník, timeline je taky čtení komentářů
@@ -251,4 +255,20 @@ test('2. kolo revize PR #5: push jen do claude/, fork, filtr na skutečného vla
   assert.equal(vNoci('gh api repos/o/r/issues/4/timeline --jq \'.[] | select(.user.login == "vlastnik")\''), 'povoleno');
   // přes den se push do jiných větví nehlídá
   assert.equal(rozhodnuti('git push -u origin platforma/2-x'), 'povoleno');
+});
+
+test('revize PR #6: hook nenačítá nástroj a v noci nejde změnit cílový repozitář', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const zdroj = await readFile(new URL('../.claude/hooks/strazce-prikazu.mjs', import.meta.url), 'utf8');
+  // nález 1: rozbitý nástroj nesmí shodit hook
+  assert.doesNotMatch(zdroj, /^import.*nastroje/m);
+  // nález 3: přesměrování na jiný repozitář
+  const vNoci = (prikaz) => posudPrikaz(prikaz, pr(), {})?.rozhodnuti ?? 'povoleno';
+  for (const p of ['GH_REPO=jiny/repo node .claude/nastroje/github-noc.mjs stav', 'git remote set-url origin https://github.com/jiny/repo',
+    'git remote add druhy https://github.com/jiny/repo', 'git config remote.origin.url x', 'git config --global url.x.insteadOf y',
+    'GIT_CONFIG_COUNT=1 node .claude/nastroje/github-noc.mjs stav', 'git -c remote.origin.url=x push origin claude/ukol-4-x']) {
+    assert.equal(vNoci(p), 'deny', p);
+  }
+  assert.equal(vNoci('git remote get-url origin'), 'povoleno');
+  assert.equal(vNoci('node .claude/nastroje/github-noc.mjs stav'), 'povoleno');
 });
