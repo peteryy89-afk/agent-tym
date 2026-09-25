@@ -1,0 +1,55 @@
+# Upozorní vlastníka na akce, které noční směna nikdy dělat nesmí (NOCNI-SMENA.md):
+# sloučení PR, přidání noc:ano nebo schvaleno-vlastnikem, odebrání vetsi-akce.
+# Hlídá okno 22:00–7:00 pražského času. Běží z main, takže ho noční agent nezmění.
+# Agent jedná pod účtem vlastníka, proto se rozlišuje jen podle času: když to byl vlastník, upozornění zavře.
+# Nečte ani nespouští kód z PR a do skriptu nevkládá text od uživatelů (jen čísla a názvy štítků přes env).
+name: Noční hlídač
+on:
+  issues:
+    types: [labeled, unlabeled]
+  pull_request_target:
+    types: [labeled, unlabeled, closed]
+permissions:
+  issues: write
+jobs:
+  nocni-hlidac:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Kontrola nočních akcí
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          AKCE: ${{ github.event.action }}
+          STITEK: ${{ github.event.label.name }}
+          CISLO: ${{ github.event.issue.number || github.event.pull_request.number }}
+          SLOUCENO: ${{ github.event.pull_request.merged }}
+        run: |
+          hodina=$((10#$(TZ=Europe/Prague date +%H)))
+          if [ "$hodina" -ge 7 ] && [ "$hodina" -lt 22 ]; then
+            echo "Mimo noční okno ($hodina h)."
+            exit 0
+          fi
+          popis=""
+          case "$AKCE:$STITEK" in
+            labeled:noc:ano) popis="přidán štítek noc:ano" ;;
+            labeled:schvaleno-vlastnikem) popis="přidán štítek schvaleno-vlastnikem" ;;
+            unlabeled:vetsi-akce) popis="odebrán štítek vetsi-akce" ;;
+          esac
+          if [ "$AKCE" = "closed" ] && [ "$SLOUCENO" = "true" ]; then
+            popis="sloučen PR"
+          fi
+          if [ -z "$popis" ]; then
+            echo "Nic podezřelého."
+            exit 0
+          fi
+          cas=$(TZ=Europe/Prague date '+%Y-%m-%d %H:%M')
+          telo="V noci ($cas) byl u #$CISLO $popis. Noční směna tohle nikdy nedělá (NOCNI-SMENA.md).
+
+          - Pokud jsi to byl ty, toto upozornění zavři.
+          - Pokud ne, zastav rutinu na claude.ai/code/routines, otevři issue se štítkem noc:stop a zkontroluj #$CISLO."
+          gh api "repos/$REPO/issues" --method POST \
+            -f title="Upozornění: v noci $popis (#$CISLO)" \
+            -f body="$telo" \
+            -f "labels[]=pro-vlastnika" > /dev/null
+          echo "::warning::V noci $popis u #$CISLO. Založeno upozornění pro vlastníka."
