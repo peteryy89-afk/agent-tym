@@ -8,7 +8,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { jeNoc } from './rezim.mjs';
 
-export const MAX_PODAGENTU = 20;
+// Pilot: strop 10, dokud vlastník podle spotřeby limitu nepovolí víc (NOCNI-SMENA.md, sekce 6).
+export const MAX_PODAGENTU = 10;
 const LEVNE_MODELY = new Set(['sonnet', 'haiku']);
 
 export function posud(nastroj, vstup = {}, prostredi = process.env, zapocitej = () => 1) {

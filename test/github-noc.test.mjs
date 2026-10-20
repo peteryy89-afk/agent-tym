@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { vytvorNastroj, repozitar, dnes, spust, nactiText } from '../.claude/nastroje/github-noc.mjs';
+import { vytvorNastroj, repozitar, dnes, spust, nactiText, MAX_UKOLU } from '../.claude/nastroje/github-noc.mjs';
 
 const REPO = 'vlastnik/agent-tym';
 const DNES = dnes();
@@ -47,7 +47,7 @@ function falesnyGitHub({ issues = [], komentare = [], behy = [[]], prs = {} } = 
 
 const issue = (number, login, labels, extra = {}) => ({ number, title: `Úkol ${number}`, body: 'text', user: { login }, labels, state: 'open', ...extra });
 
-test('stav: fronta jen od vlastníka, bez větší akce, nejvýše 3, od nejnižšího čísla', () => {
+test('stav: fronta jen od vlastníka, bez větší akce, nejvýše MAX_UKOLU, od nejnižšího čísla', () => {
   const pripraveno = ['noc:ano', 'stav:pripraveno'];
   const { gh } = falesnyGitHub({ issues: [
     issue(9, 'vlastnik', pripraveno), issue(2, 'vlastnik', pripraveno), issue(5, 'cizi', pripraveno),
@@ -56,7 +56,7 @@ test('stav: fronta jen od vlastníka, bez větší akce, nejvýše 3, od nejniž
     issue(1, 'cizi', ['noc:stop']),
   ] });
   const stav = vytvorNastroj(gh, REPO).stav();
-  assert.deepEqual(stav.fronta.map((u) => u.cislo), [2, 7, 8]);
+  assert.deepEqual(stav.fronta.map((u) => u.cislo), [2, 7, 8].slice(0, MAX_UKOLU));
   assert.equal(stav.nocStop, true);
   assert.equal(stav.dnesniZprava, false);
   assert.equal(stav.vlastnik, 'Vlastnik');

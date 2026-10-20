@@ -9,7 +9,7 @@ import { zaznam, zapis, ocisti, MAX_VELIKOST } from '../.claude/hooks/zaznam-akt
 import {
   nactiAgenty, sestavTymy, mimoRetez, nactiZaznam, vyhodnotAktivitu, nactiGitHub, sestavStav, vykresli, obsluha, zdrojStavu,
 } from '../skripty/velin.mjs';
-import { vyberFrontu } from '../.claude/nastroje/github-noc.mjs';
+import { vyberFrontu, MAX_UKOLU } from '../.claude/nastroje/github-noc.mjs';
 
 const HOOK = path.join(import.meta.dirname, '..', '.claude', 'hooks', 'zaznam-aktivity.mjs');
 const DEN = { AGENT_TYM_DEN: '1' };
@@ -214,7 +214,7 @@ test('GitHub: issues bez PR, nejnovější výsledek kontrol, fronta jen od vlas
   assert.deepEqual(gh.issues.map((i) => i.cislo), [4, 5, 8, 11, 12, 3]);
   assert.deepEqual(gh.pr[0].kontroly, { 'chranene-soubory': 'success', testy: 'in_progress' });
   const stav = sestavStav({ agenti: nactiAgenty(), udalosti: UDALOSTI, github: gh, repo: 'vlastnik/tym', ted: T0 + 600000 });
-  assert.deepEqual(stav.github.noc.fronta.map((i) => i.cislo), [3, 4], 'stejně jako github-noc: od nejstaršího, login bez ohledu na velikost');
+  assert.deepEqual(stav.github.noc.fronta.map((i) => i.cislo), [3, 4].slice(0, MAX_UKOLU), 'stejně jako github-noc: od nejstaršího, login bez ohledu na velikost');
   assert.deepEqual(gh.fronta, vyberFrontu((await falesnyGitHub().api('repos/vlastnik/tym/issues?state=open&per_page=100')), 'vlastnik'));
   assert.deepEqual(stav.github.noc.stop.map((i) => i.cislo), [11]);
   assert.deepEqual(stav.github.proVlastnika.issues.map((i) => i.cislo), [8, 12]);
